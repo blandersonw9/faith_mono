@@ -233,29 +233,6 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, horizontalPadding)
                 .offset(y: -100) // Move content up to overlay on cross
-                
-                // Additional content to demonstrate scrolling
-                VStack(spacing: StyleGuide.spacing.lg) {
-                    ForEach(0..<10) { index in
-                        VStack(spacing: StyleGuide.spacing.md) {
-                            Text("Content Section \(index + 1)")
-                                .font(StyleGuide.merriweather(size: 18, weight: .semibold))
-                                .foregroundColor(StyleGuide.mainBrown)
-                            
-                            Text("This is some sample content to demonstrate the scrollable nature of the home view. Each section provides space for different features and content.")
-                                .font(StyleGuide.merriweather(size: 14))
-                                .foregroundColor(StyleGuide.mainBrown.opacity(0.8))
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, horizontalPadding)
-                            }
-                            .padding()
-                            .background(Color.white.opacity(0.9))
-                            .cornerRadius(StyleGuide.cornerRadius.md)
-                            .padding(.horizontal, horizontalPadding)
-                    }
-                }
-                .offset(y: -100) 
-
             }
             }
         }
@@ -494,8 +471,6 @@ struct ContentButton: View {
             .padding(.vertical, 24)
             .background(isSelected ? StyleGuide.mainBrown : StyleGuide.backgroundBeige)
             .cornerRadius(12)
-            .matchedGeometryEffect(id: isSelected ? "selected_\(title)" : "unselected_\(title)", in: namespace)
-            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isSelected)
         }
         .buttonStyle(PlainButtonStyle())
     }
