@@ -32,7 +32,7 @@ class AuthManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let supabase: SupabaseClient
+    let supabase: SupabaseClient
     
     init() {
         // Initialize Supabase client

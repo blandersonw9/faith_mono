@@ -6,13 +6,16 @@
 //
 
 import SwiftUI
+import Supabase
 
 struct ContentView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var selectedTab = 0
+    @State private var showingChat = false
     
     var body: some View {
-        ZStack {
+        NavigationStack {
+            ZStack {
             // Background Image
             Image("background")
                 .resizable()
@@ -33,7 +36,11 @@ struct ContentView: View {
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 
                 // Custom Tab Bar
-                CustomTabView(selectedTab: $selectedTab)
+                CustomTabView(selectedTab: $selectedTab, showingChat: $showingChat)
+            }
+            }
+            .navigationDestination(isPresented: $showingChat) {
+                ChatView(showingChat: $showingChat)
             }
         }
     }
@@ -42,6 +49,7 @@ struct ContentView: View {
 // MARK: - Custom Tab View
 struct CustomTabView: View {
     @Binding var selectedTab: Int
+    @Binding var showingChat: Bool
     
     var body: some View {
         ZStack {
@@ -80,7 +88,7 @@ struct CustomTabView: View {
                 FloatingTabButton(
                     icon: "person.circle.fill"
                 ) {
-                    // Profile action
+                    showingChat = true
                 }
             }
             .padding(.horizontal, StyleGuide.spacing.lg)
@@ -135,114 +143,6 @@ struct FloatingTabButton: View {
     }
 }
 
-// MARK: - Tab Content Views
-struct HomeView: View {
-    @State private var selectedButton: String = "Scripture"
-    @Namespace private var buttonAnimation
-    
-    var body: some View {
-        GeometryReader { geometry in
-            let horizontalPadding = geometry.size.width * 0.025
-            
-            ScrollView {
-            VStack(spacing: StyleGuide.spacing.xl) {
-                // Header with cross background
-                ZStack(alignment: .top) {
-                    // Cross - top aligned, 260px height
-                    Image("crossFill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 260)
-                        .foregroundColor(StyleGuide.gold)
-                    
-                    // Profile buttons
-                    HStack {
-                        Button(action: {
-                            // User profile action
-                        }) {
-                            Text("Blake")
-                                .font(StyleGuide.merriweather(size: 14, weight: .medium))
-                                .foregroundColor(StyleGuide.mainBrown)
-                        }
-                        .minorButtonStyle()
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            // Streak action
-                        }) {
-                            HStack(spacing: StyleGuide.spacing.xs) {
-                                Image("streak")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 20, height: 20)
-                                
-                                Text("7")
-                                    .font(StyleGuide.merriweather(size: 14, weight: .semibold))
-                                    .foregroundColor(StyleGuide.gold)
-                            }
-                        }
-                        .minorButtonStyle()
-                    }
-                    .padding(.horizontal, horizontalPadding)
-                    .padding(.top, StyleGuide.spacing.md)
-                }
-                
-                // Main content buttons
-                VStack(spacing: 12) {
-                    // Scripture Button
-                    ContentButton(
-                        isSelected: selectedButton == "Scripture", 
-                        title: "Scripture", 
-                        minutes: "1", 
-                        subtitle: "Continue to Luke 23-24",
-                        namespace: buttonAnimation
-                    ) {
-                        selectedButton = "Scripture"
-                    }
-                    
-                    // Devotional Button
-                    ContentButton(
-                        isSelected: selectedButton == "Devotional", 
-                        title: "Devotional", 
-                        minutes: "3",
-                        namespace: buttonAnimation
-                    ) {
-                        selectedButton = "Devotional"
-                    }
-                    
-                    // Reflection Button
-                    ContentButton(
-                        isSelected: selectedButton == "Reflection", 
-                        title: "Reflection", 
-                        minutes: "2",
-                        namespace: buttonAnimation
-                    ) {
-                        selectedButton = "Reflection"
-                    }
-                    
-                    // Prayer Button
-                    ContentButton(
-                        isSelected: selectedButton == "Prayer", 
-                        title: "Prayer", 
-                        minutes: "1",
-                        namespace: buttonAnimation
-                    ) {
-                        selectedButton = "Prayer"
-                    }
-                }
-                .padding(.horizontal, horizontalPadding)
-                .offset(y: -100) // Move content up to overlay on cross
-            }
-            }
-        }
-        .background(
-            Image("background")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        )
-    }
-}
 
 
 struct BibleView: View {
@@ -412,70 +312,238 @@ struct ChapterPickerView: View {
     }
 }
 
-// MARK: - Content Buttons
 
-struct ContentButton: View {
-    let isSelected: Bool
-    let title: String
-    let minutes: String
-    let subtitle: String?
-    let namespace: Namespace.ID
-    let action: () -> Void
-    
-    init(isSelected: Bool, title: String, minutes: String, subtitle: String? = nil, namespace: Namespace.ID, action: @escaping () -> Void) {
-        self.isSelected = isSelected
-        self.title = title
-        self.minutes = minutes
-        self.subtitle = subtitle
-        self.namespace = namespace
-        self.action = action
-    }
+
+// MARK: - Chat View
+struct ChatView: View {
+    @EnvironmentObject var authManager: AuthManager
+    @Binding var showingChat: Bool
+    @State private var messages: [ChatMessage] = []
+    @State private var messageText = ""
+    @State private var isLoading = false
     
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 24) {
-                HStack {
-                    Text(title)
-                        .font(StyleGuide.merriweather(size: 18, weight: .semibold))
-                        .foregroundColor(isSelected ? .white : StyleGuide.mainBrown)
-                    
-                    Spacer()
-                    
-                    Text("\(minutes) min")
-                        .font(StyleGuide.merriweather(size: 14, weight: .medium))
-                        .foregroundColor(isSelected ? .white : StyleGuide.mainBrown)
+        VStack(spacing: 0) {
+            // Messages
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(messages) { message in
+                        ChatMessageView(message: message)
+                    }
                 }
-                
-                if isSelected {
-                    if let subtitle = subtitle {
-                        Text(subtitle)
-                            .font(StyleGuide.merriweather(size: 14))
-                            .foregroundColor(.white.opacity(0.9))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    
-                    Button(action: {
-                        // Continue action
-                    }) {
-                        Text("CONTINUE")
-                            .font(StyleGuide.merriweather(size: 14, weight: .semibold))
-                            .foregroundColor(StyleGuide.mainBrown)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 45)
-                            .background(StyleGuide.backgroundBeige)
-                            .cornerRadius(12)
-                    }
+                .padding(.horizontal, StyleGuide.spacing.lg)
+                .padding(.vertical, StyleGuide.spacing.md)
+            }
+            .background(StyleGuide.backgroundBeige)
+            
+            // Message Input
+            ChatInputView(messageText: $messageText, isLoading: isLoading) {
+                sendMessage()
+            }
+        }
+        .navigationTitle("Faith Chat")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Back") {
+                    showingChat = false
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 24)
-            .background(isSelected ? StyleGuide.mainBrown : StyleGuide.backgroundBeige)
-            .cornerRadius(12)
         }
-        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func sendMessage() {
+        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !isLoading else { return }
+        
+        let userMessage = ChatMessage(content: messageText, isUser: true)
+        messages.append(userMessage)
+        let currentMessage = messageText
+        messageText = ""
+        isLoading = true
+        
+        Task {
+            do {
+                let response = try await sendToAPI(message: currentMessage)
+                await MainActor.run {
+                    let aiMessage = ChatMessage(content: response, isUser: false)
+                    messages.append(aiMessage)
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    let errorMessage = ChatMessage(content: "I apologize, but I'm having trouble responding right now. Please try again later.", isUser: false)
+                    messages.append(errorMessage)
+                    isLoading = false
+                }
+            }
+        }
+    }
+    
+    private func sendToAPI(message: String) async throws -> String {
+        let session = try await authManager.supabase.auth.session
+        
+        // Convert messages to OpenAI format
+        let openAIMessages = messages.map { msg in
+            ["role": msg.isUser ? "user" : "assistant", "content": msg.content]
+        } + [["role": "user", "content": message]]
+        
+        let requestBody: [String: Any] = [
+            "messages": openAIMessages
+        ]
+        
+        guard let url = URL(string: "https://ppkqyfcnwajfzhvnqxec.supabase.co/functions/v1/bright-processor") else {
+            throw ChatError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ChatError.invalidResponse
+        }
+        
+        if httpResponse.statusCode == 429 {
+            throw ChatError.rateLimited
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw ChatError.serverError(httpResponse.statusCode)
+        }
+        
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        
+        guard let choices = json?["choices"] as? [[String: Any]],
+              let firstChoice = choices.first,
+              let message = firstChoice["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw ChatError.invalidResponse
+        }
+        
+        return content
     }
 }
 
+enum ChatError: Error, LocalizedError {
+    case notAuthenticated
+    case invalidURL
+    case invalidResponse
+    case rateLimited
+    case serverError(Int)
+    
+    var errorDescription: String? {
+        switch self {
+        case .notAuthenticated:
+            return "Not authenticated"
+        case .invalidURL:
+            return "Invalid URL"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .rateLimited:
+            return "Rate limit exceeded"
+        case .serverError(let code):
+            return "Server error: \(code)"
+        }
+    }
+}
+
+struct ChatMessage: Identifiable {
+    let id = UUID()
+    let content: String
+    let isUser: Bool
+    let timestamp = Date()
+}
+
+struct ChatMessageView: View {
+    let message: ChatMessage
+    
+    var body: some View {
+        VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
+            if !message.isUser {
+                Text("Faith:")
+                    .font(StyleGuide.merriweather(size: 12, weight: .medium))
+                    .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            
+            HStack {
+                if message.isUser {
+                    Spacer()
+                }
+                
+                Text(message.content)
+                    .font(StyleGuide.merriweather(size: 16))
+                    .foregroundColor(message.isUser ? StyleGuide.mainBrown : StyleGuide.mainBrown)
+                    .padding(.horizontal, message.isUser ? 16 : 0)
+                    .padding(.vertical, message.isUser ? 12 : 8)
+                    .background(
+                        message.isUser ? StyleGuide.backgroundBeige : Color.clear
+                    )
+                    .overlay(
+                        message.isUser ? 
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(StyleGuide.mainBrown.opacity(0.25), lineWidth: 1) : 
+                        nil
+                    )
+                    .cornerRadius(message.isUser ? 20 : 0)
+                    .shadow(color: message.isUser ? StyleGuide.shadows.sm : Color.clear, radius: 2, x: 0, y: 1)
+                
+                if !message.isUser {
+                    Spacer()
+                }
+            }
+        }
+    }
+}
+
+struct ChatInputView: View {
+    @Binding var messageText: String
+    let isLoading: Bool
+    let onSend: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            TextField("Type your message...", text: $messageText)
+                .font(StyleGuide.merriweather(size: 16))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.white)
+                .cornerRadius(20)
+                .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+            
+            Button(action: onSend) {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                        .frame(width: 44, height: 44)
+                        .background(StyleGuide.mainBrown)
+                        .cornerRadius(22)
+                        .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+                } else {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                        .background(StyleGuide.mainBrown)
+                        .cornerRadius(22)
+                        .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+                }
+            }
+            .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+            .opacity((messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading) ? 0.5 : 1.0)
+        }
+        .padding(.horizontal, StyleGuide.spacing.lg)
+        .padding(.vertical, StyleGuide.spacing.md)
+        .background(Color.white)
+    }
+}
 
 #Preview {
     ContentView()
