@@ -17,7 +17,7 @@ struct ContentView: View {
             Image("background")
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea()
+                .ignoresSafeArea(.all)
             
             VStack(spacing: 0) {
                 // Main Content Area
@@ -45,15 +45,13 @@ struct CustomTabView: View {
     
     var body: some View {
         ZStack {
-            // Background with image
-            Image("background")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: 75)
-                .clipped()
+            // Background with beige color
+            StyleGuide.backgroundBeige
+                .frame(height: 85)
             
             HStack(spacing: 0) {
-                // Tab 1: Home
+                Spacer()
+
                 TabButton(
                     icon: "house.fill",
                     title: "Home",
@@ -62,6 +60,8 @@ struct CustomTabView: View {
                     selectedTab = 0
                 }
                 
+                Spacer()
+
                 Spacer()
                 
                 // Tab 2: Bible
@@ -74,6 +74,7 @@ struct CustomTabView: View {
                 }
                 
                 Spacer()
+                Spacer()
                 
                 // Floating Circle Button
                 FloatingTabButton(
@@ -84,7 +85,8 @@ struct CustomTabView: View {
             }
             .padding(.horizontal, StyleGuide.spacing.lg)
         }
-        .frame(height: 75)
+        .frame(height: 85)
+        .shadow(color: StyleGuide.mainBrown.opacity(0.25), radius: 4, x: 0, y: 0)
     }
 }
 
@@ -117,49 +119,388 @@ struct FloatingTabButton: View {
         Button(action: action) {
             Circle()
                 .fill(StyleGuide.mainBrown)
-                .frame(width: 50, height: 50)
+                .frame(width: 60, height: 60)
                 .overlay(
-                    Image(systemName: icon)
-                        .font(.system(size: 24))
+                    Image("cross")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 30, height: 30)
                         .foregroundColor(.white)
                 )
                 .shadow(color: StyleGuide.shadows.md, radius: 4, x: 0, y: 2)
         }
-        .frame(width: 70, height: 70)
+        .frame(width: 60, height: 60)
         .contentShape(Circle())
-        .offset(y: -30) // Raised up a bit more
+        .offset(y: -30) // Center of circle aligned with top of tab bar
     }
 }
 
 // MARK: - Tab Content Views
 struct HomeView: View {
+    @State private var selectedButton: String = "Scripture"
+    @Namespace private var buttonAnimation
+    
     var body: some View {
-        VStack {
-            Text("Home")
-                .font(StyleGuide.merriweather(size: 24, weight: .bold))
-                .foregroundColor(StyleGuide.mainBrown)
+        GeometryReader { geometry in
+            let horizontalPadding = geometry.size.width * 0.025
             
-            Text("Welcome to your Faith journey")
-                .font(StyleGuide.merriweather(size: 16))
-                .foregroundColor(StyleGuide.mainBrown.opacity(0.8))
+            ScrollView {
+            VStack(spacing: StyleGuide.spacing.xl) {
+                // Header with cross background
+                ZStack(alignment: .top) {
+                    // Cross - top aligned, 260px height
+                    Image("crossFill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 260)
+                        .foregroundColor(StyleGuide.gold)
+                    
+                    // Profile buttons
+                    HStack {
+                        Button(action: {
+                            // User profile action
+                        }) {
+                            Text("Blake")
+                                .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                                .foregroundColor(StyleGuide.mainBrown)
+                        }
+                        .minorButtonStyle()
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            // Streak action
+                        }) {
+                            HStack(spacing: StyleGuide.spacing.xs) {
+                                Image("streak")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 20, height: 20)
+                                
+                                Text("7")
+                                    .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                    .foregroundColor(StyleGuide.gold)
+                            }
+                        }
+                        .minorButtonStyle()
+                    }
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.top, StyleGuide.spacing.md)
+                }
+                
+                // Main content buttons
+                VStack(spacing: 12) {
+                    // Scripture Button
+                    ContentButton(
+                        isSelected: selectedButton == "Scripture", 
+                        title: "Scripture", 
+                        minutes: "1", 
+                        subtitle: "Continue to Luke 23-24",
+                        namespace: buttonAnimation
+                    ) {
+                        selectedButton = "Scripture"
+                    }
+                    
+                    // Devotional Button
+                    ContentButton(
+                        isSelected: selectedButton == "Devotional", 
+                        title: "Devotional", 
+                        minutes: "3",
+                        namespace: buttonAnimation
+                    ) {
+                        selectedButton = "Devotional"
+                    }
+                    
+                    // Reflection Button
+                    ContentButton(
+                        isSelected: selectedButton == "Reflection", 
+                        title: "Reflection", 
+                        minutes: "2",
+                        namespace: buttonAnimation
+                    ) {
+                        selectedButton = "Reflection"
+                    }
+                    
+                    // Prayer Button
+                    ContentButton(
+                        isSelected: selectedButton == "Prayer", 
+                        title: "Prayer", 
+                        minutes: "1",
+                        namespace: buttonAnimation
+                    ) {
+                        selectedButton = "Prayer"
+                    }
+                }
+                .padding(.horizontal, horizontalPadding)
+                .offset(y: -100) // Move content up to overlay on cross
+                
+                // Additional content to demonstrate scrolling
+                VStack(spacing: StyleGuide.spacing.lg) {
+                    ForEach(0..<10) { index in
+                        VStack(spacing: StyleGuide.spacing.md) {
+                            Text("Content Section \(index + 1)")
+                                .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                                .foregroundColor(StyleGuide.mainBrown)
+                            
+                            Text("This is some sample content to demonstrate the scrollable nature of the home view. Each section provides space for different features and content.")
+                                .font(StyleGuide.merriweather(size: 14))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, horizontalPadding)
+                            }
+                            .padding()
+                            .background(Color.white.opacity(0.9))
+                            .cornerRadius(StyleGuide.cornerRadius.md)
+                            .padding(.horizontal, horizontalPadding)
+                    }
+                }
+                .offset(y: -100) 
+
+            }
+            }
         }
+        .background(
+            Image("background")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        )
     }
 }
 
 
 struct BibleView: View {
+    @StateObject private var bibleManager = BibleManager()
+    @State private var showingBookPicker = false
+    @State private var showingChapterPicker = false
+    
     var body: some View {
-        VStack {
-            Text("Bible")
-                .font(StyleGuide.merriweather(size: 24, weight: .bold))
-                .foregroundColor(StyleGuide.mainBrown)
+        VStack(spacing: 0) {
+            // Header with book/chapter selector
+            HStack {
+                Button(action: {
+                    showingBookPicker = true
+                }) {
+                    HStack {
+                        Text(bibleManager.currentBook > 0 ? BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book" : "Select Book")
+                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown)
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(StyleGuide.mainBrown)
+                    }
+                    .padding(.horizontal, StyleGuide.spacing.md)
+                    .padding(.vertical, StyleGuide.spacing.sm)
+                    .background(Color.white)
+                    .cornerRadius(StyleGuide.cornerRadius.sm)
+                    .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    showingChapterPicker = true
+                }) {
+                    HStack {
+                        Text("Chapter \(bibleManager.currentChapter)")
+                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown)
+                        
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(StyleGuide.mainBrown)
+                    }
+                    .padding(.horizontal, StyleGuide.spacing.md)
+                    .padding(.vertical, StyleGuide.spacing.sm)
+                    .background(Color.white)
+                    .cornerRadius(StyleGuide.cornerRadius.sm)
+                    .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+                }
+            }
+            .padding(.horizontal, StyleGuide.spacing.lg)
+            .padding(.top, StyleGuide.spacing.md)
             
-            Text("Explore God's word with AI assistance")
-                .font(StyleGuide.merriweather(size: 16))
-                .foregroundColor(StyleGuide.mainBrown.opacity(0.8))
+            // Bible content
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: StyleGuide.spacing.md) {
+                    if bibleManager.isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: StyleGuide.mainBrown))
+                            Spacer()
+                        }
+                        .padding(.top, StyleGuide.spacing.xl)
+                    } else if let errorMessage = bibleManager.errorMessage {
+                        Text(errorMessage)
+                            .font(StyleGuide.merriweather(size: 14))
+                            .foregroundColor(.red)
+        .padding()
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(StyleGuide.cornerRadius.sm)
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                    } else {
+                        ForEach(bibleManager.verses, id: \.id) { verse in
+                            HStack(alignment: .top, spacing: StyleGuide.spacing.sm) {
+                                Text("\(verse.verse)")
+                                    .font(StyleGuide.merriweather(size: 12, weight: .bold))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                                    .frame(width: 20, alignment: .trailing)
+                                
+                                Text(verse.text)
+                                    .font(StyleGuide.merriweather(size: 16))
+                                    .foregroundColor(StyleGuide.mainBrown)
+                                    .lineSpacing(4)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                        }
+                    }
+                }
+                .padding(.top, StyleGuide.spacing.md)
+            }
+        }
+        .background(StyleGuide.backgroundBeige.ignoresSafeArea(.all))
+        .onAppear {
+            if bibleManager.verses.isEmpty {
+                bibleManager.loadVerses(book: 1, chapter: 1) // Load Genesis 1 by default
+            }
+        }
+        .sheet(isPresented: $showingBookPicker) {
+            BookPickerView(bibleManager: bibleManager)
+        }
+        .sheet(isPresented: $showingChapterPicker) {
+            ChapterPickerView(bibleManager: bibleManager)
         }
     }
 }
+
+// MARK: - Book Picker
+struct BookPickerView: View {
+    @ObservedObject var bibleManager: BibleManager
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            List(bibleManager.getAvailableBooks(), id: \.id) { book in
+                Button(action: {
+                    bibleManager.loadVerses(book: book.id, chapter: 1)
+                    presentationMode.wrappedValue.dismiss()
+                }) {
+                    Text(book.name)
+                        .font(StyleGuide.merriweather(size: 16))
+                        .foregroundColor(StyleGuide.mainBrown)
+                }
+            }
+            .navigationTitle("Select Book")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Chapter Picker
+struct ChapterPickerView: View {
+    @ObservedObject var bibleManager: BibleManager
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            List(bibleManager.getAvailableChapters(for: bibleManager.currentBook), id: \.self) { chapter in
+                Button(action: {
+                    bibleManager.loadVerses(book: bibleManager.currentBook, chapter: chapter)
+                    presentationMode.wrappedValue.dismiss()
+                }) {
+                    Text("Chapter \(chapter)")
+                        .font(StyleGuide.merriweather(size: 16))
+                        .foregroundColor(StyleGuide.mainBrown)
+                }
+            }
+            .navigationTitle("Select Chapter")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Content Buttons
+
+struct ContentButton: View {
+    let isSelected: Bool
+    let title: String
+    let minutes: String
+    let subtitle: String?
+    let namespace: Namespace.ID
+    let action: () -> Void
+    
+    init(isSelected: Bool, title: String, minutes: String, subtitle: String? = nil, namespace: Namespace.ID, action: @escaping () -> Void) {
+        self.isSelected = isSelected
+        self.title = title
+        self.minutes = minutes
+        self.subtitle = subtitle
+        self.namespace = namespace
+        self.action = action
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 24) {
+                HStack {
+                    Text(title)
+                        .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                        .foregroundColor(isSelected ? .white : StyleGuide.mainBrown)
+                    
+                    Spacer()
+                    
+                    Text("\(minutes) min")
+                        .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                        .foregroundColor(isSelected ? .white : StyleGuide.mainBrown)
+                }
+                
+                if isSelected {
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .font(StyleGuide.merriweather(size: 14))
+                            .foregroundColor(.white.opacity(0.9))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    
+                    Button(action: {
+                        // Continue action
+                    }) {
+                        Text("CONTINUE")
+                            .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 45)
+                            .background(StyleGuide.backgroundBeige)
+                            .cornerRadius(12)
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 24)
+            .background(isSelected ? StyleGuide.mainBrown : StyleGuide.backgroundBeige)
+            .cornerRadius(12)
+            .matchedGeometryEffect(id: isSelected ? "selected_\(title)" : "unselected_\(title)", in: namespace)
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isSelected)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 
 #Preview {
     ContentView()

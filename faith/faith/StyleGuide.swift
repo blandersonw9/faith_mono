@@ -17,6 +17,9 @@ struct StyleGuide {
     /// Background beige color: #FFFBF7
     static let backgroundBeige = Color(hex: "#FFFBF7")
     
+    /// Gold accent color: #D4AF37
+    static let gold = Color(hex: "#D4AF37")
+    
     // MARK: - Typography
     
     /// Merriweather font family
@@ -110,6 +113,24 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+struct MinorButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(StyleGuide.merriweather(size: 14, weight: .medium))
+            .foregroundColor(StyleGuide.mainBrown)
+            .padding(.horizontal, StyleGuide.spacing.md)
+            .padding(.vertical, StyleGuide.spacing.sm)
+            .background(StyleGuide.backgroundBeige)
+            .overlay(
+                RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm)
+                    .stroke(StyleGuide.mainBrown.opacity(0.25), lineWidth: 1)
+            )
+            .cornerRadius(StyleGuide.cornerRadius.sm)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
 // MARK: - View Extensions
 
 // MARK: - Color Extension for Hex Support
@@ -157,5 +178,10 @@ extension View {
     /// Apply secondary button style
     func secondaryButtonStyle() -> some View {
         self.buttonStyle(SecondaryButtonStyle())
+    }
+    
+    /// Apply minor button style
+    func minorButtonStyle() -> some View {
+        self.buttonStyle(MinorButtonStyle())
     }
 }
