@@ -58,6 +58,7 @@ struct TodayContent: View {
                 .foregroundColor(StyleGuide.backgroundBeige)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .lineSpacing(12)
             
             // BOTTOM: Continue button
             Button(action: {
