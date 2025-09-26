@@ -104,6 +104,15 @@ struct ChatView: View {
                 )
                 .contentShape(Rectangle())
                 .onTapGesture { isInputFocused = true }
+                .gesture(
+                    DragGesture()
+                        .onEnded { value in
+                            let dy = value.translation.height
+                            if dy > 50 { // swipe down on input to dismiss keyboard
+                                isInputFocused = false
+                            }
+                        }
+                )
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
