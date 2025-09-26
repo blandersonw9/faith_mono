@@ -33,7 +33,8 @@ struct ContentView: View {
                     BibleView()
                         .tag(1)
                 }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .gesture(DragGesture().onChanged { _ in })
                 
                 // Custom Tab Bar
                 CustomTabView(selectedTab: $selectedTab, showingChat: $showingChat)
@@ -41,6 +42,7 @@ struct ContentView: View {
             }
             .navigationDestination(isPresented: $showingChat) {
                 ChatView(showingChat: $showingChat)
+                    .navigationBarHidden(true)
             }
         }
     }
@@ -144,173 +146,6 @@ struct FloatingTabButton: View {
 }
 
 
-
-struct BibleView: View {
-    @StateObject private var bibleManager = BibleManager()
-    @State private var showingBookPicker = false
-    @State private var showingChapterPicker = false
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header with book/chapter selector
-            HStack {
-                Button(action: {
-                    showingBookPicker = true
-                }) {
-                    HStack {
-                        Text(bibleManager.currentBook > 0 ? BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book" : "Select Book")
-                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                            .foregroundColor(StyleGuide.mainBrown)
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(StyleGuide.mainBrown)
-                    }
-                    .padding(.horizontal, StyleGuide.spacing.md)
-                    .padding(.vertical, StyleGuide.spacing.sm)
-                    .background(Color.white)
-                    .cornerRadius(StyleGuide.cornerRadius.sm)
-                    .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
-                }
-                
-                Spacer()
-                
-                Button(action: {
-                    showingChapterPicker = true
-                }) {
-                    HStack {
-                        Text("Chapter \(bibleManager.currentChapter)")
-                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                            .foregroundColor(StyleGuide.mainBrown)
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(StyleGuide.mainBrown)
-                    }
-                    .padding(.horizontal, StyleGuide.spacing.md)
-                    .padding(.vertical, StyleGuide.spacing.sm)
-                    .background(Color.white)
-                    .cornerRadius(StyleGuide.cornerRadius.sm)
-                    .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
-                }
-            }
-            .padding(.horizontal, StyleGuide.spacing.lg)
-            .padding(.top, StyleGuide.spacing.md)
-            
-            // Bible content
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: StyleGuide.spacing.md) {
-                    if bibleManager.isLoading {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: StyleGuide.mainBrown))
-                            Spacer()
-                        }
-                        .padding(.top, StyleGuide.spacing.xl)
-                    } else if let errorMessage = bibleManager.errorMessage {
-                        Text(errorMessage)
-                            .font(StyleGuide.merriweather(size: 14))
-                            .foregroundColor(.red)
-        .padding()
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(StyleGuide.cornerRadius.sm)
-                            .padding(.horizontal, StyleGuide.spacing.lg)
-                    } else {
-                        ForEach(bibleManager.verses, id: \.id) { verse in
-                            HStack(alignment: .top, spacing: StyleGuide.spacing.sm) {
-                                Text("\(verse.verse)")
-                                    .font(StyleGuide.merriweather(size: 12, weight: .bold))
-                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
-                                    .frame(width: 20, alignment: .trailing)
-                                
-                                Text(verse.text)
-                                    .font(StyleGuide.merriweather(size: 16))
-                                    .foregroundColor(StyleGuide.mainBrown)
-                                    .lineSpacing(4)
-                                    .multilineTextAlignment(.leading)
-                            }
-                            .padding(.horizontal, StyleGuide.spacing.lg)
-                        }
-                    }
-                }
-                .padding(.top, StyleGuide.spacing.md)
-            }
-        }
-        .background(StyleGuide.backgroundBeige.ignoresSafeArea(.all))
-        .onAppear {
-            if bibleManager.verses.isEmpty {
-                bibleManager.loadVerses(book: 1, chapter: 1) // Load Genesis 1 by default
-            }
-        }
-        .sheet(isPresented: $showingBookPicker) {
-            BookPickerView(bibleManager: bibleManager)
-        }
-        .sheet(isPresented: $showingChapterPicker) {
-            ChapterPickerView(bibleManager: bibleManager)
-        }
-    }
-}
-
-// MARK: - Book Picker
-struct BookPickerView: View {
-    @ObservedObject var bibleManager: BibleManager
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            List(bibleManager.getAvailableBooks(), id: \.id) { book in
-                Button(action: {
-                    bibleManager.loadVerses(book: book.id, chapter: 1)
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    Text(book.name)
-                        .font(StyleGuide.merriweather(size: 16))
-                        .foregroundColor(StyleGuide.mainBrown)
-                }
-            }
-            .navigationTitle("Select Book")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Chapter Picker
-struct ChapterPickerView: View {
-    @ObservedObject var bibleManager: BibleManager
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            List(bibleManager.getAvailableChapters(for: bibleManager.currentBook), id: \.self) { chapter in
-                Button(action: {
-                    bibleManager.loadVerses(book: bibleManager.currentBook, chapter: chapter)
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    Text("Chapter \(chapter)")
-                        .font(StyleGuide.merriweather(size: 16))
-                        .foregroundColor(StyleGuide.mainBrown)
-                }
-            }
-            .navigationTitle("Select Chapter")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
-        }
-    }
-}
 
 
 #Preview {

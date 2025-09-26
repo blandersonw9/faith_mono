@@ -77,6 +77,7 @@ class BibleManager: ObservableObject {
     }
     
     func loadVerses(book: Int, chapter: Int) {
+        print("BibleManager.loadVerses called with: Book \(book), Chapter \(chapter)")
         isLoading = true
         errorMessage = nil
         
@@ -111,6 +112,7 @@ class BibleManager: ObservableObject {
                 self.currentBook = book
                 self.currentChapter = chapter
                 self.isLoading = false
+                print("BibleManager updated: currentBook=\(self.currentBook), currentChapter=\(self.currentChapter), verses count=\(verses.count)")
             }
         } else {
             DispatchQueue.main.async {

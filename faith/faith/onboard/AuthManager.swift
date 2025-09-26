@@ -41,6 +41,9 @@ class AuthManager: ObservableObject {
             supabaseKey: Config.supabaseAnonKey
         )
         
+        // Set initial loading state
+        self.isLoading = true
+        
         // Check if user is already authenticated
         Task {
             await checkAuthStatus()
@@ -50,6 +53,8 @@ class AuthManager: ObservableObject {
     // MARK: - Authentication Status
     @MainActor
     func checkAuthStatus() async {
+        let startTime = Date()
+        
         do {
             let session = try await supabase.auth.session
             self.user = session.user
@@ -66,6 +71,16 @@ class AuthManager: ObservableObject {
                 self.user = nil
             }
         }
+        
+        // Ensure minimum 0.5 second loading time
+        let elapsed = Date().timeIntervalSince(startTime)
+        let remainingTime = max(0, 0.5 - elapsed)
+        
+        if remainingTime > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(remainingTime * 1_000_000_000))
+        }
+        
+        isLoading = false
     }
     
     // MARK: - Google Sign-In
