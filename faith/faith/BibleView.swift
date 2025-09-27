@@ -5,15 +5,38 @@ struct BibleView: View {
     @StateObject private var bibleManager = BibleManager()
     @State private var showingBookPicker = false
     
+    // MARK: - Helper Functions
+    
+    private func cleanBibleText(_ text: String) -> String {
+        var cleanedText = text
+        
+        // Convert [word] to italics formatting
+        cleanedText = cleanedText.replacingOccurrences(of: "\\[([^\\]]+)\\]", with: "*$1*", options: .regularExpression)
+        
+        // Remove paragraph indicators (¶, pilcrow symbols)
+        cleanedText = cleanedText.replacingOccurrences(of: "¶", with: "")
+        
+        // Remove other common Bible formatting markers (but keep [word] as italics)
+        cleanedText = cleanedText.replacingOccurrences(of: "\\{[^}]*\\}", with: "", options: .regularExpression) // {word}
+        cleanedText = cleanedText.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression) // (word)
+        
+        // Clean up extra whitespace and normalize
+        cleanedText = cleanedText.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        cleanedText = cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return cleanedText
+    }
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // Header with combined book/chapter selector
-            HStack {
-                Spacer()
-                
-                Button(action: {
-                    showingBookPicker = true
-                }) {
+        GeometryReader { geometry in
+            let horizontalPadding = geometry.size.width * 0.025
+            
+            VStack(spacing: 0) {
+                // Header with combined book/chapter selector - moved to top left
+                HStack {
+                    Button(action: {
+                        showingBookPicker = true
+                    }) {
                     HStack {
                         Text(bibleManager.currentBook > 0 ? 
                              "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book") \(bibleManager.currentChapter)" : 
@@ -30,15 +53,16 @@ struct BibleView: View {
                     .background(Color.white)
                     .cornerRadius(StyleGuide.cornerRadius.sm)
                     .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Spacer()
                 }
-                
-                Spacer()
-            }
-            .padding(.horizontal, StyleGuide.spacing.lg)
-            .padding(.top, StyleGuide.spacing.md)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.top, StyleGuide.spacing.md)
             
             // Bible content
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: StyleGuide.spacing.md) {
                     if bibleManager.isLoading {
                         HStack {
@@ -52,10 +76,10 @@ struct BibleView: View {
                         Text(errorMessage)
                             .font(StyleGuide.merriweather(size: 14))
                             .foregroundColor(.red)
-        .padding()
+                            .padding()
                             .background(Color.red.opacity(0.1))
                             .cornerRadius(StyleGuide.cornerRadius.sm)
-                            .padding(.horizontal, StyleGuide.spacing.lg)
+                            .padding(.horizontal, horizontalPadding)
                     } else {
                         ForEach(bibleManager.verses, id: \.id) { verse in
                             HStack(alignment: .top, spacing: StyleGuide.spacing.sm) {
@@ -64,23 +88,42 @@ struct BibleView: View {
                                     .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
                                     .frame(width: 20, alignment: .trailing)
                                 
-                                Text(verse.text)
+                                Text(LocalizedStringKey(cleanBibleText(verse.text)))
                                     .font(StyleGuide.merriweather(size: 16))
                                     .foregroundColor(StyleGuide.mainBrown)
                                     .lineSpacing(4)
                                     .multilineTextAlignment(.leading)
                             }
-                            .padding(.horizontal, StyleGuide.spacing.lg)
+                            .padding(.horizontal, horizontalPadding)
                         }
+                        
+                        // Add 200px empty space at the bottom
+                        Spacer()
+                            .frame(height: 100)
                     }
                 }
                 .padding(.top, StyleGuide.spacing.md)
             }
+            }
         }
         .onAppear {
             if bibleManager.verses.isEmpty {
-                bibleManager.loadVerses(book: 1, chapter: 1) // Load Genesis 1 by default
+                // Load saved position or default to Genesis 1
+                let savedBook = UserDefaults.standard.integer(forKey: "savedBibleBook")
+                let savedChapter = UserDefaults.standard.integer(forKey: "savedBibleChapter")
+                
+                if savedBook > 0 && savedChapter > 0 {
+                    bibleManager.loadVerses(book: savedBook, chapter: savedChapter)
+                } else {
+                    bibleManager.loadVerses(book: 1, chapter: 1) // Load Genesis 1 by default
+                }
             }
+        }
+        .onChange(of: bibleManager.currentBook) { newBook in
+            UserDefaults.standard.set(newBook, forKey: "savedBibleBook")
+        }
+        .onChange(of: bibleManager.currentChapter) { newChapter in
+            UserDefaults.standard.set(newChapter, forKey: "savedBibleChapter")
         }
         .sheet(isPresented: $showingBookPicker) {
             BookPickerView(bibleManager: bibleManager)
@@ -121,7 +164,8 @@ struct BookPickerView: View {
                             }
                             .padding(.horizontal, StyleGuide.spacing.lg)
                             .padding(.vertical, StyleGuide.spacing.md)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
                         
