@@ -77,7 +77,6 @@ struct BibleView: View {
                 .padding(.top, StyleGuide.spacing.md)
             }
         }
-        .background(StyleGuide.backgroundBeige.ignoresSafeArea(.all))
         .onAppear {
             if bibleManager.verses.isEmpty {
                 bibleManager.loadVerses(book: 1, chapter: 1) // Load Genesis 1 by default

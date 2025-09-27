@@ -16,11 +16,20 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-            // Background Image
-            Image("background")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .ignoresSafeArea(.all)
+            // Conditional background based on selected tab
+            if selectedTab == 0 {
+                Image("background")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .ignoresSafeArea(.all)
+                
+            } else {
+                Image("backgroundBeige")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .ignoresSafeArea(.all)
+            }
+            
             
             VStack(spacing: 0) {
                 // Main Content Area

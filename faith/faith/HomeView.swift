@@ -33,11 +33,6 @@ struct HomeView: View {
             }
             }
         }
-        .background(
-            Image("background")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        )
     }
 }
 

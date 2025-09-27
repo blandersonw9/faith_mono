@@ -6,7 +6,7 @@ struct ChatView: View {
     @EnvironmentObject var authManager: AuthManager
     @Binding var showingChat: Bool
     @State private var messages: [ChatMessage] = [
-        .init(id: UUID(), role: .system, text: "How can I help you with your faith journey today?")
+        .init(id: UUID(), role: .system, text: "What's on your mind?")
     ]
     @State private var inputText: String = ""
     @State private var isLoading = false
@@ -68,6 +68,23 @@ struct ChatView: View {
                     }
                 }
                 .padding(.bottom, 12)
+                        // Edge-only swipe zone for right swipe to avoid conflicts with scroll
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: 40)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            // Only trigger on significant right swipe from left edge
+                            if dx > 50 && abs(dy) < 50 {
+                                showingChat = false
+                            }
+                        }
+                )
+        }
             }
             
             // Input bar
@@ -128,12 +145,14 @@ struct ChatView: View {
                 .onEnded { value in
                     let dy = value.translation.height
                     let dx = value.translation.width
-                    // Only dismiss if it's a significant downward swipe and not too horizontal
+                    
+                    // Swipe down to dismiss
                     if dy > 150 && abs(dx) < 50 {
                         showingChat = false
                     }
                 }
         )
+
         .onAppear {
             // Raise keyboard shortly after appearing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
