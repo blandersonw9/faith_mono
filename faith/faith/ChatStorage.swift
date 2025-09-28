@@ -84,23 +84,32 @@ final class ChatStore: ObservableObject {
     // MARK: - Persistence
     private func loadFromDisk() async {
         let url = fileURL
-        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return }
         do {
-            let decoded = try JSONDecoder().decode([StoredConversation].self, from: data)
+            let data = try Data(contentsOf: url)
+            guard !data.isEmpty else { return }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let decoded = try decoder.decode([StoredConversation].self, from: data)
             await MainActor.run { self.conversations = decoded }
         } catch {
-            // If decode fails, keep empty list but don't crash
+            // If missing or corrupt, start fresh
         }
     }
     
     @MainActor
     private func persist() async {
+        // Snapshot state on main, perform I/O off the main thread to avoid UI stalls
+        let snapshot = conversations
         let url = fileURL
-        do {
-            let data = try JSONEncoder().encode(conversations)
-            try data.write(to: url, options: [.atomic])
-        } catch {
-            // Ignore write errors in this minimal implementation
+        Task.detached(priority: .background) {
+            do {
+                let encoder = JSONEncoder()
+                encoder.dateEncodingStrategy = .iso8601
+                let data = try encoder.encode(snapshot)
+                try data.write(to: url, options: [.atomic])
+            } catch {
+                // Ignore write errors in this minimal implementation
+            }
         }
     }
     
