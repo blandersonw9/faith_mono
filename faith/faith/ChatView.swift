@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Supabase
 import Combine
 
@@ -19,6 +20,8 @@ struct ChatView: View {
     @State private var suggestions: [String] = []
     @State private var isFetchingSuggestions = false
     @State private var scrollOffset: CGFloat = 0
+    @State private var showingHistory: Bool = false
+    @State private var currentConversationId: UUID? = nil
     
     // UI constants to avoid magic numbers
     private enum UI {
@@ -48,6 +51,12 @@ struct ChatView: View {
                     .foregroundColor(StyleGuide.mainBrown)
                 
                 Spacer()
+                Button(action: { showingHistory = true }) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(StyleGuide.mainBrown)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -70,7 +79,7 @@ struct ChatView: View {
                                         if message.text.isEmpty && isLoading {
                                             ThinkingIndicator()
                                         } else {
-                                            BasicMarkdownText(text: message.text)
+                                            BasicMarkdownText(text: message.text, enableLinking: true)
                                         }
                                     }
                                     .padding(.horizontal, 16)
@@ -176,6 +185,14 @@ struct ChatView: View {
         })
         // No root drag gesture; preserve link taps
         
+        .sheet(isPresented: $showingHistory) {
+            ChatHistoryView(
+                store: ChatStore.shared,
+                onSelect: { id in loadConversation(id: id) },
+                onStartNew: { startNewConversation() }
+            )
+        }
+        
         .onAppear {
             // Raise keyboard shortly after appearing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -233,6 +250,10 @@ struct ChatView: View {
                     isLoading = false
                 }
             }
+            // Persist conversation after assistant responds
+            let current = await MainActor.run { messages }
+            let convo = await ChatStore.shared.upsertConversation(from: current, existingId: currentConversationId)
+            await MainActor.run { currentConversationId = convo.id }
         } catch {
             await MainActor.run {
                 if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
@@ -242,7 +263,35 @@ struct ChatView: View {
                     isLoading = false
                 }
             }
+            // Persist partial conversation even on failure
+            let current = await MainActor.run { messages }
+            let convo = await ChatStore.shared.upsertConversation(from: current, existingId: currentConversationId)
+            await MainActor.run { currentConversationId = convo.id }
         }
+    }
+
+    private func loadConversation(id: UUID) {
+        Task {
+            if let loaded = await ChatStore.shared.loadConversation(id: id) {
+                await MainActor.run {
+                    currentConversationId = id
+                    messages = loaded
+                    inputText = ""
+                    isLoading = false
+                }
+                await refreshSuggestions()
+            }
+        }
+    }
+
+    private func startNewConversation() {
+        currentConversationId = nil
+        messages = [
+            .init(id: UUID(), role: .system, text: "What's on your mind?")
+        ]
+        inputText = ""
+        isLoading = false
+        Task { await refreshSuggestions() }
     }
     
     private func sendToAPI(message: String, conversation: [ChatMessage]? = nil) async throws -> String {
@@ -532,7 +581,8 @@ struct UserBubble: View {
     let text: String
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            BasicMarkdownText(text: text)
+            // Do not auto-link in user messages to avoid accidental links
+            BasicMarkdownText(text: text, enableLinking: false)
         }
         .padding(.vertical, 11)
         .padding(.horizontal, 14)
@@ -550,6 +600,7 @@ struct UserBubble: View {
 // MARK: - Basic Markdown Support
 private struct BasicMarkdownText: View {
     let text: String
+    var enableLinking: Bool = true
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @Environment(\.openURL) private var openURL
 
@@ -588,14 +639,9 @@ private struct BasicMarkdownText: View {
 
     private func lineWithLinks(_ line: String) -> some View {
         let spans = splitBoldItalic(line)
-        // Build attributed string with bold/italic and default color.
-        // While appending each span, detect if the span itself is a verse reference
-        // and apply link attributes directly to the just-appended range. This avoids
-        // any String.Index ↔ AttributedString.Index conversions.
+        // Build attributed string with bold/italic and default color
         var attributed = AttributedString("")
-        var hasLinks = false
         for span in spans {
-            let start = attributed.endIndex
             var a = AttributedString(span.text)
             if span.isBold && span.isItalic {
                 a.font = StyleGuide.merriweather(size: 16, weight: .bold)
@@ -609,24 +655,59 @@ private struct BasicMarkdownText: View {
             }
             a.foregroundColor = StyleGuide.mainBrown
             attributed.append(a)
-            let end = attributed.endIndex
+        }
 
-            // If this span looks like a reference on its own, link it
-            let trimmed = span.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let spanMatches = BibleReferenceUtils.findMatches(in: trimmed)
-            if spanMatches.count == 1, let match = spanMatches.first, match.display == trimmed,
-               let url = BibleReferenceUtils.linkURL(for: match.selection) {
-                let r = start..<end
-                attributed[r].link = url
-                attributed[r].foregroundColor = StyleGuide.gold
-                attributed[r].underlineStyle = .single
-                hasLinks = true
+        // Link verse references anywhere in the line using NSAttributedString ranges
+        let ns = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
+        // Replace non-breaking spaces with normal spaces to allow wrapping inside links
+        ns.mutableString.replaceOccurrences(of: "\u{00A0}", with: " ", options: [], range: NSRange(location: 0, length: ns.length))
+        ns.mutableString.replaceOccurrences(of: "\u{202F}", with: " ", options: [], range: NSRange(location: 0, length: ns.length))
+        let text = ns.string
+        let matches = BibleReferenceUtils.findMatches(in: text)
+        for m in matches {
+            if let url = BibleReferenceUtils.linkURL(for: m.selection) {
+                let nsRange = NSRange(m.range, in: text)
+                ns.addAttributes([
+                    .link: url,
+                    .foregroundColor: UIColor(StyleGuide.gold),
+                    .underlineStyle: NSUnderlineStyle.single.rawValue
+                ], range: nsRange)
             }
         }
-        // Always return SwiftUI Text to avoid wrapping issues with UITextView.
-        // The AttributedString contains .link ranges, so taps will be handled by openURL env.
+        let linked = AttributedString(ns)
         return AnyView(
-            Text(attributed)
+            Text(linked)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(8)
+                .fixedSize(horizontal: false, vertical: true)
+        )
+    }
+
+    private func lineWithoutLinks(_ line: String) -> some View {
+        let spans = splitBoldItalic(line)
+        var attributed = AttributedString("")
+        for span in spans {
+            var a = AttributedString(span.text)
+            if span.isBold && span.isItalic {
+                a.font = StyleGuide.merriweather(size: 16, weight: .bold)
+            } else if span.isBold {
+                a.font = StyleGuide.merriweather(size: 16, weight: .bold)
+            } else if span.isItalic {
+                a.font = StyleGuide.merriweather(size: 16)
+                a.inlinePresentationIntent = .emphasized
+            } else {
+                a.font = StyleGuide.merriweather(size: 16)
+            }
+            a.foregroundColor = StyleGuide.mainBrown
+            attributed.append(a)
+        }
+        // Normalize non-breaking spaces for consistent wrapping
+        let ns = NSMutableAttributedString(attributedString: NSAttributedString(attributed))
+        ns.mutableString.replaceOccurrences(of: "\u{00A0}", with: " ", options: [], range: NSRange(location: 0, length: ns.length))
+        ns.mutableString.replaceOccurrences(of: "\u{202F}", with: " ", options: [], range: NSRange(location: 0, length: ns.length))
+        let linked = AttributedString(ns)
+        return AnyView(
+            Text(linked)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(8)
                 .fixedSize(horizontal: false, vertical: true)
@@ -669,6 +750,7 @@ private struct BasicMarkdownText: View {
 // MARK: - UIKit-backed text view for reliable tappable links
 private struct LinkingText: UIViewRepresentable {
     let attributed: AttributedString
+    let width: CGFloat
     let onOpen: (URL) -> Void
 
     func makeUIView(context: Context) -> UITextView {
@@ -687,7 +769,9 @@ private struct LinkingText: UIViewRepresentable {
         tv.textContainer.lineBreakMode = .byWordWrapping
         tv.setContentCompressionResistancePriority(.required, for: .vertical)
         tv.setContentHuggingPriority(.required, for: .vertical)
-        tv.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        // Keep the view's assigned width; do not expand to fit long links
+        tv.setContentHuggingPriority(.required, for: .horizontal)
+        tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tv.linkTextAttributes = [
             .foregroundColor: UIColor(StyleGuide.gold),
             .underlineStyle: NSUnderlineStyle.single.rawValue
@@ -703,11 +787,17 @@ private struct LinkingText: UIViewRepresentable {
         ps.lineSpacing = 8
         ps.alignment = .left
         ps.lineBreakMode = .byWordWrapping
+        if #available(iOS 14.0, *) {
+            ps.lineBreakStrategy = [.pushOut]
+        }
         m.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: m.length))
         // Ensure body font applied across attributed content (non-link runs)
         m.addAttribute(.font, value: UIFont(name: "Merriweather", size: 16) as Any, range: NSRange(location: 0, length: m.length))
         m.addAttribute(.foregroundColor, value: UIColor(StyleGuide.mainBrown), range: NSRange(location: 0, length: m.length))
         uiView.attributedText = m
+        // Ensure wrapping uses the provided width and tracks view size.
+        // Subtract a tiny epsilon to avoid rounding expanding the layout.
+        uiView.textContainer.size = CGSize(width: max(0, width - 1), height: .greatestFiniteMagnitude)
         uiView.textAlignment = .left
         uiView.tintColor = UIColor(StyleGuide.gold)
         uiView.setNeedsLayout()
@@ -726,7 +816,7 @@ private struct LinkingText: UIViewRepresentable {
     }
     // Ensure SwiftUI gets an accurate intrinsic size for wrapping
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize {
-        let targetWidth = proposal.width ?? UIScreen.main.bounds.width - 32
+        let targetWidth = max(0, width - 1)
         let size = uiView.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
         return CGSize(width: targetWidth, height: size.height)
     }

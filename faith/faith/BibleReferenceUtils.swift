@@ -80,28 +80,86 @@ enum BibleReferenceUtils {
 
     static func findMatches(in text: String) -> [BibleReferenceMatch] {
         var results: [BibleReferenceMatch] = []
-        // Support verse ranges with hyphen, en dash, or em dash
-        let pattern = #"\b([1-3]?\s?[A-Za-z\.]+(?:\s+[A-Za-z\.]+)*)\s+(\d+)(?::(\d+)(?:[-–—](\d+))?)?\b"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return [] }
         let ns = text as NSString
-        let fullRange = NSRange(location: 0, length: ns.length)
-        regex.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
-            guard let match = match else { return }
-            let bookRange = match.range(at: 1)
-            let chapRange = match.range(at: 2)
-            let verseRange = match.range(at: 3)
-            let bookStr = ns.substring(with: bookRange)
-            let chapStr = ns.substring(with: chapRange)
-            let verseStr = verseRange.location != NSNotFound ? ns.substring(with: verseRange) : nil
-            let key = normalize(bookStr)
-            guard let bookId = resolveBookId(from: key) else { return }
-            let chapter = Int(chapStr) ?? 1
-            let verse = verseStr != nil ? Int(verseStr!) : nil
-            let r = Range(match.range, in: text)!
-            let display = String(text[r])
-            let sel = BibleNavigator.Selection(book: bookId, chapter: chapter, verse: verse)
-            results.append(BibleReferenceMatch(range: r, display: display, selection: sel))
+
+        // Helper that finds a recognized book within a candidate phrase by
+        // trimming leading non-book words (e.g., "in Mark" -> "Mark").
+        func recognizedBook(in candidate: String) -> (recognized: String, id: Int, leadingOffsetInCandidate: Int)? {
+            // Tokenize by whitespace preserving order
+            let rawTokens = candidate.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            guard !rawTokens.isEmpty else { return nil }
+            for start in rawTokens.indices {
+                let suffix = rawTokens[start...].joined(separator: " ")
+                let key = normalize(suffix)
+                if let id = resolveBookId(from: key) {
+                    // Compute character offset of suffix inside candidate
+                    let leading = rawTokens[..<start].joined(separator: " ")
+                    let offset = leading.isEmpty ? 0 : (leading.count + 1) // plus one space
+                    return (suffix, id, offset)
+                }
+            }
+            return nil
         }
+
+        // Pass 1: explicit references with chapter[:verse[-end]]
+        let pattern = #"(?<![A-Za-z0-9])([1-3]?\s?[A-Za-z][A-Za-z\.]*?(?:\s+[A-Za-z\.]+)*)[ \t\u00A0\u202F]+(\d+)(?::(\d+)(?:[\-\u2010\u2011\u2012\u2013\u2014\u2212](\d+))?)?(?=[^A-Za-z0-9]|$)"#
+        if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {
+            let fullRange = NSRange(location: 0, length: ns.length)
+            regex.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+                guard let match = match else { return }
+                let bookRange = match.range(at: 1)
+                let chapRange = match.range(at: 2)
+                let verseRange = match.range(at: 3)
+                let bookStr = ns.substring(with: bookRange)
+                let chapStr = ns.substring(with: chapRange)
+                let verseStr = verseRange.location != NSNotFound ? ns.substring(with: verseRange) : nil
+
+                // Trim any leading non-book words within the captured phrase
+                guard let rec = recognizedBook(in: bookStr) else { return }
+                let chapter = Int(chapStr) ?? 1
+                let verse = verseStr != nil ? Int(verseStr!) : nil
+
+                // Adjust start index to the beginning of the recognized book
+                let absoluteStart = bookRange.location + rec.leadingOffsetInCandidate
+                let absoluteEnd = match.range.location + match.range.length
+                let adjusted = NSRange(location: absoluteStart, length: absoluteEnd - absoluteStart)
+                guard let r = Range(adjusted, in: text) else { return }
+                let display = String(text[r])
+                let sel = BibleNavigator.Selection(book: rec.id, chapter: chapter, verse: verse)
+                results.append(BibleReferenceMatch(range: r, display: display, selection: sel))
+            }
+        }
+
+        // Pass 2: standalone book mentions (no chapter). We link the book text itself.
+        // Use full canonical book names to reduce false positives.
+        var occupiedRanges: [Range<String.Index>] = results.map { $0.range }
+        let canonicalNames = Array(BibleManager.bookNames.values)
+        // Add a couple common alternates for Song of Songs
+        let extraAlternates = ["Song of Songs", "Song of Solomon", "Canticles"]
+        let bookPool = canonicalNames + extraAlternates
+        let escaped = bookPool
+            .map { NSRegularExpression.escapedPattern(for: $0) }
+            .sorted { $0.count > $1.count } // prefer longer first
+            .joined(separator: "|")
+        if !escaped.isEmpty, let bookOnlyRegex = try? NSRegularExpression(
+            pattern: "(?<![A-Za-z0-9])(?:" + escaped + ")(?![A-Za-z0-9])",
+            options: [.caseInsensitive]
+        ) {
+            let fullRange = NSRange(location: 0, length: ns.length)
+            bookOnlyRegex.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+                guard let match = match else { return }
+                guard let r = Range(match.range, in: text) else { return }
+                // Skip if already part of an explicit reference
+                if occupiedRanges.contains(where: { $0.overlaps(r) }) { return }
+                let name = String(text[r])
+                let key = normalize(name)
+                guard let id = nameToId[key] else { return }
+                let sel = BibleNavigator.Selection(book: id, chapter: 1, verse: nil)
+                results.append(BibleReferenceMatch(range: r, display: name, selection: sel))
+                occupiedRanges.append(r)
+            }
+        }
+
         return results
     }
 
