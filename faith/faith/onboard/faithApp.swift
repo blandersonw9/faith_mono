@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct faithApp: App {
     @StateObject private var authManager = AuthManager()
+    @StateObject private var bibleNavigator = BibleNavigator()
     
     var body: some Scene {
         WindowGroup {
@@ -19,9 +20,11 @@ struct faithApp: App {
                 } else if authManager.isAuthenticated {
                     ContentView()
                         .environmentObject(authManager)
+                        .environmentObject(bibleNavigator)
                 } else {
                     LoginView()
                         .environmentObject(authManager)
+                        .environmentObject(bibleNavigator)
                 }
             }
             .onAppear {

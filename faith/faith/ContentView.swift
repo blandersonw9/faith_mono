@@ -10,6 +10,7 @@ import Supabase
 
 struct ContentView: View {
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var bibleNavigator: BibleNavigator
     @State private var selectedTab = 0
     @State private var showingChat = false
     
@@ -50,9 +51,14 @@ struct ContentView: View {
             }
             }
             .navigationDestination(isPresented: $showingChat) {
-                ChatView(showingChat: $showingChat)
+                ChatView(showingChat: $showingChat, selectedTab: $selectedTab)
                     .navigationBarHidden(true)
             }
+        }
+        .onChange(of: bibleNavigator.pendingSelection) { sel in
+            guard sel != nil else { return }
+            selectedTab = 1
+            showingChat = false
         }
     }
 }

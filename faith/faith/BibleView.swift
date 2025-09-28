@@ -2,8 +2,11 @@ import SwiftUI
 import Supabase
 
 struct BibleView: View {
+    @EnvironmentObject var bibleNavigator: BibleNavigator
     @StateObject private var bibleManager = BibleManager()
     @State private var showingBookPicker = false
+    @State private var targetVerse: Int? = nil
+    @State private var scrollTrigger: Bool = false
     
     // MARK: - Helper Functions
     
@@ -62,6 +65,7 @@ struct BibleView: View {
                 .padding(.top, StyleGuide.spacing.md)
             
             // Bible content
+            ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: StyleGuide.spacing.md) {
                     if bibleManager.isLoading {
@@ -95,6 +99,7 @@ struct BibleView: View {
                                     .multilineTextAlignment(.leading)
                             }
                             .padding(.horizontal, horizontalPadding)
+                            .id(verse.id)
                         }
                         
                         // Add 200px empty space at the bottom
@@ -104,26 +109,75 @@ struct BibleView: View {
                 }
                 .padding(.top, StyleGuide.spacing.md)
             }
+            .onChange(of: bibleManager.currentChapter) { _ in
+                if let v = targetVerse, let target = bibleManager.verses.first(where: { $0.verse == v }) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            scrollProxy.scrollTo(target.id, anchor: .top)
+                        }
+                    }
+                }
+            }
+            .onChange(of: scrollTrigger) { _ in
+                if let v = targetVerse, let target = bibleManager.verses.first(where: { $0.verse == v }) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            scrollProxy.scrollTo(target.id, anchor: .top)
+                        }
+                    }
+                }
+            }
+            }
             }
         }
         .onAppear {
-            if bibleManager.verses.isEmpty {
+            // Apply pending selection if any
+            if let sel = bibleNavigator.pendingSelection {
+                targetVerse = sel.verse
+                bibleManager.loadVerses(book: sel.book, chapter: sel.chapter)
+                bibleNavigator.pendingSelection = nil
+            } else {
                 // Load saved position or default to Genesis 1
                 let savedBook = UserDefaults.standard.integer(forKey: "savedBibleBook")
                 let savedChapter = UserDefaults.standard.integer(forKey: "savedBibleChapter")
-                
+                let savedVerse = UserDefaults.standard.integer(forKey: "savedBibleVerse")
                 if savedBook > 0 && savedChapter > 0 {
+                    targetVerse = savedVerse > 0 ? savedVerse : nil
                     bibleManager.loadVerses(book: savedBook, chapter: savedChapter)
-                } else {
-                    bibleManager.loadVerses(book: 1, chapter: 1) // Load Genesis 1 by default
+                } else if bibleManager.verses.isEmpty {
+                    targetVerse = nil
+                    bibleManager.loadVerses(book: 1, chapter: 1)
                 }
             }
+        }
+        .onChange(of: bibleNavigator.pendingSelection) { newValue in
+            guard let sel = newValue else { return }
+            targetVerse = sel.verse
+            bibleManager.loadVerses(book: sel.book, chapter: sel.chapter)
+            bibleNavigator.pendingSelection = nil
         }
         .onChange(of: bibleManager.currentBook) { newBook in
             UserDefaults.standard.set(newBook, forKey: "savedBibleBook")
         }
         .onChange(of: bibleManager.currentChapter) { newChapter in
             UserDefaults.standard.set(newChapter, forKey: "savedBibleChapter")
+            if let v = targetVerse, v > 0 {
+                UserDefaults.standard.set(v, forKey: "savedBibleVerse")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "savedBibleVerse")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToBibleTab)) { _ in
+            let savedBook = UserDefaults.standard.integer(forKey: "savedBibleBook")
+            let savedChapter = UserDefaults.standard.integer(forKey: "savedBibleChapter")
+            let savedVerse = UserDefaults.standard.integer(forKey: "savedBibleVerse")
+            if savedBook > 0 && savedChapter > 0 {
+                targetVerse = savedVerse > 0 ? savedVerse : nil
+                bibleManager.loadVerses(book: savedBook, chapter: savedChapter)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    scrollTrigger.toggle()
+                }
+            }
         }
         .sheet(isPresented: $showingBookPicker) {
             BookPickerView(bibleManager: bibleManager)

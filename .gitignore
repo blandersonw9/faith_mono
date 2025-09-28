@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Xcode user state (do NOT commit)
+**/xcuserdata/
+*.xcuserdatad/
+*.xccheckout
+*.xcscmblueprint
+
+# Xcode build
+DerivedData/
+build/
+
+# SwiftPM
+.swiftpm/
+.build/
