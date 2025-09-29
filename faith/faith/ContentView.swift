@@ -13,6 +13,7 @@ struct ContentView: View {
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @State private var selectedTab = 0
     @State private var showingChat = false
+    @State private var initialChatPrompt: String? = nil
     
     var body: some View {
         NavigationStack {
@@ -51,7 +52,7 @@ struct ContentView: View {
             }
             }
             .navigationDestination(isPresented: $showingChat) {
-                ChatView(showingChat: $showingChat, selectedTab: $selectedTab)
+                ChatView(showingChat: $showingChat, selectedTab: $selectedTab, initialPrompt: initialChatPrompt)
                     .navigationBarHidden(true)
             }
         }
@@ -59,6 +60,12 @@ struct ContentView: View {
             guard sel != nil else { return }
             selectedTab = 1
             showingChat = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openChatWithPrompt)) { note in
+            if let prompt = note.object as? String {
+                initialChatPrompt = prompt
+                showingChat = true
+            }
         }
     }
 }
@@ -103,7 +110,8 @@ struct CustomTabView: View {
                 
                 // Floating Circle Button
                 FloatingTabButton(
-                    icon: "person.circle.fill"
+                    icon: "aiIcon",
+                    isSystemIcon: false
                 ) {
                     showingChat = true
                 }
@@ -138,6 +146,7 @@ struct TabButton: View {
 // MARK: - Floating Tab Button
 struct FloatingTabButton: View {
     let icon: String
+    let isSystemIcon: Bool
     let action: () -> Void
     
     var body: some View {
@@ -151,6 +160,20 @@ struct FloatingTabButton: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 30, height: 30)
                         .foregroundColor(.white)
+                    // Group {
+                    //     if isSystemIcon {
+                    //         Image(systemName: icon)
+                    //             .font(.system(size: 32, weight: .semibold))
+                    //             .foregroundColor(.white)
+                    //     } else {
+                    //         Image(icon)
+                    //             .renderingMode(.template)
+                    //             .resizable()
+                    //             .aspectRatio(contentMode: .fit)
+                    //             .frame(width: 36, height: 36)
+                    //             .foregroundColor(.white)
+                    //     }
+                    // }
                 )
                 .shadow(color: StyleGuide.shadows.md, radius: 4, x: 0, y: 2)
         }
