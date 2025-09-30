@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 @main
 struct faithApp: App {
@@ -29,6 +30,14 @@ struct faithApp: App {
             }
             .onAppear {
                 Config.logConfigStatus()
+                // Remove UINavigationBar bottom hairline globally and make it transparent
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithTransparentBackground()
+                appearance.shadowColor = .clear
+                appearance.backgroundColor = .clear
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+                UINavigationBar.appearance().compactAppearance = appearance
             }
         }
     }
