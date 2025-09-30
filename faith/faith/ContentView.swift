@@ -95,11 +95,6 @@ struct ContentView: View {
             }
         }
         // No bottom safe-area inset. We're manually overlaying the bar instead.
-        #if DEBUG
-        // Visualize the bottom safe-area and log its value
-        .overlay(SafeAreaDebugOverlay(), alignment: .bottom)
-        .onAppear { print("[DEBUG] bottomSafeInset:", bottomSafeInset) }
-        #endif
     }
 }
 
@@ -163,20 +158,7 @@ struct CustomTabView: View {
         .frame(height: barHeight + max(0, bottomInset))
         .ignoresSafeArea(edges: .bottom)
         .shadow(color: StyleGuide.mainBrown.opacity(0.25), radius: 4, x: 0, y: 0)
-        #if DEBUG
-        .background(Color.yellow.opacity(0.12))
-        .overlay(
-            GeometryReader { g in
-                Color.clear
-                    .onAppear {
-                        let minY = g.frame(in: .global).minY
-                        print("[DEBUG] CustomTabView height:", g.size.height, "bottomInset:", bottomInset, "global minY:", minY)
-                    }
-            }
-            .allowsHitTesting(false)
-        )
-        .border(Color.green, width: 1)
-        #endif
+        
     }
 }
 
@@ -248,23 +230,4 @@ struct FloatingTabButton: View {
         .environmentObject(AuthManager())
 }
 
-#if DEBUG
-private struct SafeAreaDebugOverlay: View {
-    var body: some View {
-        GeometryReader { g in
-            VStack(spacing: 0) {
-                Text("inset: \(Int(g.safeAreaInsets.bottom))")
-                    .font(.system(size: 9))
-                    .padding(.vertical, 2)
-                    .padding(.horizontal, 6)
-                    .background(Color.red.opacity(0.85))
-                    .foregroundColor(.white)
-                Color.red.opacity(0.25)
-                    .frame(height: g.safeAreaInsets.bottom)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .allowsHitTesting(false)
-        }
-    }
-}
-#endif
+ 

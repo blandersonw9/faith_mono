@@ -1,8 +1,8 @@
 import SwiftUI
-import Supabase
 import UIKit
 
 // MARK: - Reading Mode
+/// User-selectable reading themes for the Bible reading experience.
 enum ReadingMode: String, CaseIterable {
     case day = "Day"
     case night = "Night"
@@ -57,7 +57,8 @@ enum ReadingMode: String, CaseIterable {
     }
 }
 
-struct BibleView: View {
+/// Primary Bible reading screen handling navigation, verse rendering, and in-verse actions.
+@MainActor struct BibleView: View {
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @StateObject private var bibleManager = BibleManager()
     @State private var showingBookPicker = false
@@ -78,7 +79,6 @@ struct BibleView: View {
     }()
     @State private var showSettingsMenu = false
     @State private var showNavigationArrows = true
-    @State private var lastScrollOffset: CGFloat = 0
     @State private var isAtBottom = false
     @State private var animatedVerses: Set<Int> = [] // Track which verses have been animated
     
@@ -90,6 +90,9 @@ struct BibleView: View {
     
     // MARK: - Helper Functions
     
+    /// Normalizes and cleans verse text for display.
+    /// - Parameter text: Raw verse text from the local scripture database.
+    /// - Returns: Cleaned, typographically adjusted text safe for rendering.
     private func cleanBibleText(_ text: String) -> String {
         var cleanedText = text
         
@@ -518,13 +521,17 @@ struct BibleView: View {
                             saveAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                 impactFeedback.impactOccurred()
+                                #if DEBUG
                                 print("Save verse: \(verse.book):\(verse.chapter):\(verse.verse)")
+                                #endif
                                 withAnimation { showActionMenu = false }
                             },
                             noteAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                 impactFeedback.impactOccurred()
+                                #if DEBUG
                                 print("Add note to verse: \(verse.book):\(verse.chapter):\(verse.verse)")
+                                #endif
                                 withAnimation { showActionMenu = false }
                             },
                             colorAction: { color in
@@ -569,7 +576,7 @@ struct BibleView: View {
                     readingMode: readingMode
                 )
                 .padding(.horizontal, horizontalPadding)
-                .padding(.bottom, 60) // Lift above nav bar
+                .padding(.bottom, 76) // Lift slightly higher above the tab bar
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             
@@ -687,9 +694,10 @@ struct BibleView: View {
 }
 
 // MARK: - Book Picker
+/// Presents a collapsible list of Bible books with a chapter grid for selection.
 struct BookPickerView: View {
     @ObservedObject var bibleManager: BibleManager
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss
     @State private var expandedBook: Int? = nil
     
     var body: some View {
@@ -738,9 +746,11 @@ struct BookPickerView: View {
                                                 Button(action: {
                                                     let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                                     impactFeedback.impactOccurred()
+                                                    #if DEBUG
                                                     print("Selected: Book \(book.id), Chapter \(chapter)")
+                                                    #endif
                                                     bibleManager.loadVerses(book: book.id, chapter: chapter)
-                                                    presentationMode.wrappedValue.dismiss()
+                                                    dismiss()
                                                 }) {
                                                     Text("\(chapter)")
                                                         .font(StyleGuide.merriweather(size: 14, weight: .medium))
@@ -809,7 +819,7 @@ struct BookPickerView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                 }
             }
@@ -818,9 +828,10 @@ struct BookPickerView: View {
 }
 
 // MARK: - Chapter Picker
+/// Shows a grid of chapters for the currently selected book.
 struct ChapterPickerView: View {
     @ObservedObject var bibleManager: BibleManager
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         NavigationView {
@@ -848,7 +859,7 @@ struct ChapterPickerView: View {
                                                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                                 impactFeedback.impactOccurred()
                                                 bibleManager.loadVerses(book: bibleManager.currentBook, chapter: chapter)
-                                                presentationMode.wrappedValue.dismiss()
+                                                dismiss()
                                             }
                                         )
                                     } else {
@@ -868,7 +879,7 @@ struct ChapterPickerView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                 }
             }
@@ -877,6 +888,7 @@ struct ChapterPickerView: View {
 }
 
 // MARK: - Chapter Button
+/// Styled chapter cell for use in book and chapter pickers.
 private struct ChapterButton: View {
     let chapter: Int
     let isCurrentChapter: Bool
@@ -967,6 +979,7 @@ private struct ChapterButton: View {
 }
 
 // MARK: - Verse Action Menu
+/// Floating action menu anchored to a verse, providing copy, share, save, notes, and color highlight actions.
 private struct VerseActionMenu: View {
     let currentHighlightColor: Color?
     let copyAction: () -> Void
