@@ -61,6 +61,7 @@ struct BibleView: View {
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @StateObject private var bibleManager = BibleManager()
     @State private var showingBookPicker = false
+    @State private var showingChapterPicker = false
     @State private var targetVerse: Int? = nil
     @State private var scrollTrigger: Bool = false
     @State private var selectedVerseId: Int? = nil
@@ -79,6 +80,7 @@ struct BibleView: View {
     @State private var showNavigationArrows = true
     @State private var lastScrollOffset: CGFloat = 0
     @State private var isAtBottom = false
+    @State private var animatedVerses: Set<Int> = [] // Track which verses have been animated
     
     // Font size constants
     private let minFontSize: CGFloat = 12
@@ -119,25 +121,60 @@ struct BibleView: View {
             let horizontalPadding = geometry.size.width * 0.05
             
             VStack(spacing: 0) {
-                // Header with combined book/chapter selector - moved to top left
+                // Header with centered book/chapter selectors
                 if showNavigationArrows {
-                HStack {
-                    Button(action: {
-                        showingBookPicker = true
-                    }) {
-                    HStack {
-                        Text(bibleManager.currentBook > 0 ? 
-                             "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book") \(bibleManager.currentChapter)" : 
-                             "Select Book")
-                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                            .foregroundColor(readingMode.textColor)
+                HStack(spacing: 8) {
+                    Spacer()
+                    
+                    // Book and Chapter selector combined (centered)
+                    HStack(spacing: 4) {
+                        // Book name button
+                        Button(action: {
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                            impactFeedback.impactOccurred()
+                            showingBookPicker = true
+                        }) {
+                            HStack(spacing: 6) {
+                                Text(bibleManager.currentBook > 0 ? 
+                                     "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book")" : 
+                                     "Select Book")
+                                    .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                                    .foregroundColor(readingMode.textColor)
+                                
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(readingMode.textColor.opacity(0.6))
+                            }
+                            .padding(.horizontal, StyleGuide.spacing.md)
+                            .padding(.vertical, StyleGuide.spacing.sm)
+                        }
+                        .buttonStyle(PlainButtonStyle())
                         
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(readingMode.textColor)
+                        // Divider
+                        Rectangle()
+                            .fill(readingMode.textColor.opacity(0.15))
+                            .frame(width: 1, height: 24)
+                        
+                        // Chapter number button
+                        Button(action: {
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                            impactFeedback.impactOccurred()
+                            showingChapterPicker = true
+                        }) {
+                            HStack(spacing: 6) {
+                                Text("\(bibleManager.currentChapter)")
+                                    .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                                    .foregroundColor(readingMode.textColor)
+                                
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(readingMode.textColor.opacity(0.6))
+                            }
+                            .padding(.horizontal, StyleGuide.spacing.md)
+                            .padding(.vertical, StyleGuide.spacing.sm)
+                        }
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .padding(.horizontal, StyleGuide.spacing.md)
-                    .padding(.vertical, StyleGuide.spacing.sm)
                     .background(
                         RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
                             .fill(readingMode.cardBackground)
@@ -148,8 +185,6 @@ struct BibleView: View {
                     )
                     .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
                     .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
-                    }
-                    .buttonStyle(PlainButtonStyle())
                     
                     Spacer()
                     
@@ -234,6 +269,7 @@ struct BibleView: View {
                         ForEach(bibleManager.verses, id: \.id) { verse in
                             let isSelected = selectedVerseId == verse.id
                             let highlightColor = verseHighlights[verse.id]
+                            let isAnimated = animatedVerses.contains(verse.id)
                             ZStack(alignment: .bottomLeading) {
                                 // Highlight background for colored verses (when not selected)
                                 if let color = highlightColor, !isSelected {
@@ -345,11 +381,24 @@ struct BibleView: View {
                             .compositingGroup()
                             .id(verse.id)
                             .zIndex(isSelected ? 100 : 0)
+                            // Entrance animation
+                            .opacity(isAnimated ? 1 : 0)
+                            .offset(y: isAnimated ? 0 : 20)
+                            .onAppear {
+                                // Only animate if this verse hasn't been animated yet
+                                if !animatedVerses.contains(verse.id) {
+                                    // Stagger the animation based on verse number for a cascading effect
+                                    let delay = Double(verse.verse % 10) * 0.03
+                                    withAnimation(.easeOut(duration: 0.5).delay(delay)) {
+                                        animatedVerses.insert(verse.id)
+                                    }
+                                }
+                            }
                         }
                         
                         // Add bottom padding for better spacing
                         Spacer()
-                            .frame(height: 120)
+                            .frame(height: 200)
                         
                         // Bottom detection
                         GeometryReader { geometry in
@@ -597,6 +646,7 @@ struct BibleView: View {
             selectedVerseId = nil
             showActionMenu = false
             isAtBottom = false
+            animatedVerses.removeAll() // Reset animations for new chapter
             // Show navigation arrows when chapter changes
             withAnimation(.easeInOut(duration: 0.3)) {
                 showNavigationArrows = true
@@ -619,6 +669,9 @@ struct BibleView: View {
         }
         .sheet(isPresented: $showingBookPicker) {
             BookPickerView(bibleManager: bibleManager)
+        }
+        .sheet(isPresented: $showingChapterPicker) {
+            ChapterPickerView(bibleManager: bibleManager)
         }
         .onTapGesture {
             // Tapping outside hides menus and deselects the verse
@@ -761,6 +814,155 @@ struct BookPickerView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Chapter Picker
+struct ChapterPickerView: View {
+    @ObservedObject var bibleManager: BibleManager
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: StyleGuide.spacing.md) {
+                    // Current book name
+                    Text(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book")
+                        .font(StyleGuide.merriweather(size: 20, weight: .bold))
+                        .foregroundColor(StyleGuide.mainBrown)
+                        .padding(.top, StyleGuide.spacing.lg)
+                    
+                    // Chapter grid
+                    VStack(spacing: StyleGuide.spacing.sm) {
+                        ForEach(0..<(bibleManager.getAvailableChapters(for: bibleManager.currentBook).count + 4) / 5, id: \.self) { row in
+                            HStack(spacing: 4) {
+                                ForEach(0..<5, id: \.self) { col in
+                                    let chapterIndex = row * 5 + col
+                                    if chapterIndex < bibleManager.getAvailableChapters(for: bibleManager.currentBook).count {
+                                        let chapter = bibleManager.getAvailableChapters(for: bibleManager.currentBook)[chapterIndex]
+                                        
+                                        ChapterButton(
+                                            chapter: chapter,
+                                            isCurrentChapter: chapter == bibleManager.currentChapter,
+                                            action: {
+                                                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                                                impactFeedback.impactOccurred()
+                                                bibleManager.loadVerses(book: bibleManager.currentBook, chapter: chapter)
+                                                presentationMode.wrappedValue.dismiss()
+                                            }
+                                        )
+                                    } else {
+                                        Spacer()
+                                            .frame(maxWidth: .infinity, minHeight: 50)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                        }
+                    }
+                    .padding(.bottom, StyleGuide.spacing.lg)
+                }
+            }
+            .navigationTitle("Select Chapter")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Chapter Button
+private struct ChapterButton: View {
+    let chapter: Int
+    let isCurrentChapter: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text("\(chapter)")
+                .font(StyleGuide.merriweather(size: 14, weight: isCurrentChapter ? .bold : .medium))
+                .foregroundColor(isCurrentChapter ? Color.white : StyleGuide.mainBrown)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(chapterBackground)
+                .overlay(chapterBorder)
+                .cornerRadius(12)
+                .shadow(color: lightShadowColor, radius: lightShadowRadius, x: -2, y: -2)
+                .shadow(color: darkShadowColor, radius: darkShadowRadius, x: 2, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var chapterBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(backgroundGradient)
+    }
+    
+    private var backgroundGradient: LinearGradient {
+        if isCurrentChapter {
+            return LinearGradient(
+                colors: [
+                    StyleGuide.mainBrown,
+                    StyleGuide.mainBrown.opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return LinearGradient(
+                colors: [
+                    StyleGuide.backgroundBeige.opacity(0.9),
+                    StyleGuide.backgroundBeige.opacity(0.95)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    private var chapterBorder: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .stroke(borderGradient, lineWidth: 0.8)
+    }
+    
+    private var borderGradient: LinearGradient {
+        if isCurrentChapter {
+            return LinearGradient(
+                colors: [Color.clear],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return LinearGradient(
+                colors: [
+                    Color.white.opacity(0.3),
+                    StyleGuide.mainBrown.opacity(0.08)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    private var lightShadowColor: Color {
+        isCurrentChapter ? StyleGuide.mainBrown.opacity(0.3) : Color.white.opacity(0.8)
+    }
+    
+    private var darkShadowColor: Color {
+        Color.black.opacity(isCurrentChapter ? 0.2 : 0.08)
+    }
+    
+    private var lightShadowRadius: CGFloat {
+        isCurrentChapter ? 4 : 2
+    }
+    
+    private var darkShadowRadius: CGFloat {
+        isCurrentChapter ? 6 : 3
     }
 }
 
