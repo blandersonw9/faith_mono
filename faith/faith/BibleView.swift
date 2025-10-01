@@ -1682,4 +1682,3 @@ private struct ChapterNavigationBar: View {
         }
     }
 }
-
