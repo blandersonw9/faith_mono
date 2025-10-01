@@ -10,6 +10,7 @@ import SwiftUI
 import Supabase
 import GoogleSignIn
 import Combine
+import AuthenticationServices
 
 // MARK: - Auth Errors
 enum AuthError: LocalizedError {
@@ -31,6 +32,9 @@ class AuthManager: ObservableObject {
     @Published var user: Supabase.User?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var userFirstName: String?
+    
+    var appleSignInCoordinator: AppleSignInCoordinator?
     
     let supabase: SupabaseClient
     
@@ -40,6 +44,9 @@ class AuthManager: ObservableObject {
             supabaseURL: URL(string: Config.supabaseURL)!,
             supabaseKey: Config.supabaseAnonKey
         )
+        
+        // Load saved first name
+        self.userFirstName = UserDefaults.standard.string(forKey: "userFirstName")
         
         // Set initial loading state
         self.isLoading = true
@@ -105,6 +112,9 @@ class AuthManager: ObservableObject {
                 throw AuthError.noIdToken
             }
             
+            // Extract first name from Google profile
+            let firstName = user.profile?.givenName
+            
             // Sign in to Supabase with Google token
             let session = try await supabase.auth.signInWithIdToken(
                 credentials: .init(
@@ -116,24 +126,50 @@ class AuthManager: ObservableObject {
             self.user = session.user
             self.isAuthenticated = session.user != nil
             
+            print("🔐 Google Sign-In successful!")
+            print("   User: \(session.user.id)")
+            print("   isAuthenticated: \(self.isAuthenticated)")
+            print("   Current thread: \(Thread.isMainThread ? "Main" : "Background")")
+            
+            // Save first name if available
+            if let firstName = firstName {
+                self.userFirstName = firstName
+                UserDefaults.standard.set(firstName, forKey: "userFirstName")
+                print("✅ Saved user first name: \(firstName)")
+            } else {
+                print("⚠️ No first name available from Google")
+            }
+            
         } catch {
-            print("Google Sign-In error: \(error)")
+            print("❌ Google Sign-In error: \(error)")
+            print("   Error description: \(error.localizedDescription)")
             self.errorMessage = error.localizedDescription
         }
         
         isLoading = false
+        print("📊 Final state - isLoading: \(isLoading), isAuthenticated: \(isAuthenticated)")
     }
     
-    // MARK: - Apple Sign-In (Ready for future implementation)
-    @MainActor
-    func signInWithApple() async {
+    // MARK: - Apple Sign-In
+    func signInWithApple() {
         isLoading = true
         errorMessage = nil
         
-        // TODO: Implement Apple Sign-In when ready
-        // This is a placeholder for future Apple Sign-In implementation
-        self.errorMessage = "Apple Sign-In not yet configured"
-        isLoading = false
+        let appleIDProvider = ASAuthorizationAppleIDProvider()
+        let request = appleIDProvider.createRequest()
+        request.requestedScopes = [.fullName, .email]
+        
+        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+        
+        // Create and set the coordinator as delegate
+        let coordinator = AppleSignInCoordinator(authManager: self)
+        authorizationController.delegate = coordinator
+        authorizationController.presentationContextProvider = coordinator
+        
+        // Store coordinator to prevent deallocation
+        self.appleSignInCoordinator = coordinator
+        
+        authorizationController.performRequests()
     }
     
     // MARK: - Sign Out
@@ -146,6 +182,11 @@ class AuthManager: ObservableObject {
             try await supabase.auth.signOut()
             self.isAuthenticated = false
             self.user = nil
+            self.userFirstName = nil
+            // Clear saved data
+            UserDefaults.standard.removeObject(forKey: "userFirstName")
+            UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.removeObject(forKey: "onboardingGratitude")
         } catch {
             print("Sign out error: \(error)")
             self.errorMessage = error.localizedDescription
@@ -154,4 +195,80 @@ class AuthManager: ObservableObject {
         isLoading = false
     }
     
+}
+
+// MARK: - Apple Sign-In Coordinator
+class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    weak var authManager: AuthManager?
+    
+    init(authManager: AuthManager) {
+        self.authManager = authManager
+    }
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        guard let authManager = authManager else { return }
+        
+        if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+           let identityTokenData = appleIDCredential.identityToken,
+           let identityToken = String(data: identityTokenData, encoding: .utf8) {
+            
+            let firstName = appleIDCredential.fullName?.givenName
+            
+            // Complete sign in on main actor
+            Task { @MainActor in
+                do {
+                    // Sign in to Supabase with Apple token
+                    let session = try await authManager.supabase.auth.signInWithIdToken(
+                        credentials: .init(
+                            provider: .apple,
+                            idToken: identityToken
+                        )
+                    )
+                    
+                    authManager.user = session.user
+                    authManager.isAuthenticated = session.user != nil
+                    
+                    // Save first name if available
+                    if let firstName = firstName {
+                        authManager.userFirstName = firstName
+                        UserDefaults.standard.set(firstName, forKey: "userFirstName")
+                        print("✅ Saved user first name: \(firstName)")
+                    }
+                    
+                    authManager.isLoading = false
+                    
+                } catch {
+                    print("Apple Sign-In error: \(error)")
+                    authManager.errorMessage = error.localizedDescription
+                    authManager.isLoading = false
+                }
+            }
+        } else {
+            Task { @MainActor in
+                authManager.errorMessage = "No ID token received from Apple"
+                authManager.isLoading = false
+            }
+        }
+    }
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        guard let authManager = authManager else { return }
+        
+        Task { @MainActor in
+            // Check if user cancelled
+            let nsError = error as NSError
+            if nsError.domain == ASAuthorizationError.errorDomain,
+               nsError.code == ASAuthorizationError.canceled.rawValue {
+                print("Apple Sign-In cancelled by user")
+            } else {
+                print("Apple Sign-In error: \(error)")
+                authManager.errorMessage = error.localizedDescription
+            }
+            authManager.isLoading = false
+        }
+    }
+    
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return UIApplication.shared.windows.first!
+    }
 }

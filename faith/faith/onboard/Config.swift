@@ -30,6 +30,16 @@ struct Config {
     // Google Sign-In Configuration
     static let googleClientID = "845381061349-h4c9jk0dr3gfjb97mpb64o4oiaasf70g.apps.googleusercontent.com"
     
+    // Debug / Development toggles
+    static let forceOnboarding: Bool = {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-forceOnboarding") { return true }
+        if let env = ProcessInfo.processInfo.environment["FORCE_ONBOARDING"] {
+            return ["1", "true", "yes", "on"].contains(env.lowercased())
+        }
+        return false
+    }()
+    
     // Helper method to validate configuration
     static func validate() -> Bool {
         return !supabaseURL.contains("YOUR_SUPABASE_URL") && 
@@ -42,6 +52,7 @@ struct Config {
         print("   Supabase URL: \(supabaseURL.isEmpty ? "❌ Not set" : "✅ Set")")
         print("   Supabase Key: \(supabaseAnonKey.isEmpty ? "❌ Not set" : "✅ Set")")
         print("   Google Client ID: \(googleClientID.isEmpty ? "❌ Not set" : "✅ Set")")
+        print("   Force Onboarding: \(forceOnboarding ? "🔧 Enabled" : "Off")")
         print("   Configuration Valid: \(validate() ? "✅" : "❌")")
     }
 }

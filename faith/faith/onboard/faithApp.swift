@@ -12,21 +12,38 @@ import UIKit
 struct faithApp: App {
     @StateObject private var authManager = AuthManager()
     @StateObject private var bibleNavigator = BibleNavigator()
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     var body: some Scene {
         WindowGroup {
             Group {
                 if authManager.isLoading {
                     LoadingView()
+                        .onAppear { print("📱 Showing: LoadingView") }
                 } else if authManager.isAuthenticated {
-                    ContentView()
-                        .environmentObject(authManager)
-                        .environmentObject(bibleNavigator)
+                    if hasCompletedOnboarding {
+                        ContentView()
+                            .environmentObject(authManager)
+                            .environmentObject(bibleNavigator)
+                            .onAppear { print("📱 Showing: ContentView") }
+                    } else {
+                        OnboardingView()
+                            .environmentObject(authManager)
+                            .environmentObject(bibleNavigator)
+                            .onAppear { print("📱 Showing: OnboardingView") }
+                    }
                 } else {
                     LoginView()
                         .environmentObject(authManager)
                         .environmentObject(bibleNavigator)
+                        .onAppear { print("📱 Showing: LoginView") }
                 }
+            }
+            .onChange(of: authManager.isAuthenticated) { newValue in
+                print("🔄 isAuthenticated changed to: \(newValue)")
+            }
+            .onChange(of: authManager.isLoading) { newValue in
+                print("🔄 isLoading changed to: \(newValue)")
             }
             .onAppear {
                 Config.logConfigStatus()

@@ -51,11 +51,9 @@ struct LoginView: View {
                     .secondaryButtonStyle()
                     .disabled(authManager.isLoading)
                     
-                    // Apple Sign-In Button (placeholder)
+                    // Apple Sign-In Button
                     Button(action: {
-                        Task {
-                            await authManager.signInWithApple()
-                        }
+                        authManager.signInWithApple()
                     }) {
                         HStack {
                             Image(systemName: "applelogo")
@@ -64,8 +62,7 @@ struct LoginView: View {
                         }
                     }
                     .primaryButtonStyle()
-                    .disabled(true) // Disabled until Apple Sign-In is configured
-                    .opacity(0.6)
+                    .disabled(authManager.isLoading)
                 }
                 .padding(.horizontal, StyleGuide.spacing.lg)
             }
