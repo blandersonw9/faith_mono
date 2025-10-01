@@ -56,7 +56,16 @@ struct OnboardingLoadingView: View {
                 // Continue button (appears after text finishes typing)
                 if !isLoading && !responseText.isEmpty {
                     Button(action: {
-                        onComplete()
+                        Task {
+                            await saveOnboardingDataToSupabase()
+                            // Add delay and animation for smooth transition
+                            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
+                            await MainActor.run {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    onComplete()
+                                }
+                            }
+                        }
                     }) {
                         Text("Continue")
                     }
@@ -76,6 +85,44 @@ struct OnboardingLoadingView: View {
             Task {
                 await fetchPersonalizedResponse()
             }
+        }
+    }
+    
+    // MARK: - Supabase Save
+    
+    private struct OnboardingUpdate: Encodable {
+        let growth_goal: String
+        let onboarding_completed_at: String
+    }
+    
+    private func saveOnboardingDataToSupabase() async {
+        // Get the growth goal from UserDefaults
+        guard let growthGoal = UserDefaults.standard.string(forKey: "onboardingGrowthGoal"),
+              !growthGoal.isEmpty else {
+            print("⚠️ No growth goal to save")
+            return
+        }
+        
+        do {
+            let userId = try await authManager.supabase.auth.session.user.id
+            
+            // Create update object
+            let update = OnboardingUpdate(
+                growth_goal: growthGoal,
+                onboarding_completed_at: ISO8601DateFormatter().string(from: Date())
+            )
+            
+            // Update the user's profile with the growth goal and completion timestamp
+            try await authManager.supabase
+                .from("profiles")
+                .update(update)
+                .eq("id", value: userId.uuidString)
+                .execute()
+            
+            print("✅ Saved onboarding data to Supabase")
+        } catch {
+            print("❌ Failed to save onboarding data to Supabase: \(error)")
+            // Continue anyway - data is saved to UserDefaults as fallback
         }
     }
     

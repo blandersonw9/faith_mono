@@ -16,29 +16,36 @@ struct faithApp: App {
     
     var body: some Scene {
         WindowGroup {
-            Group {
+            ZStack {
                 if authManager.isLoading {
                     LoadingView()
                         .onAppear { print("📱 Showing: LoadingView") }
+                        .transition(.opacity)
                 } else if authManager.isAuthenticated {
                     if hasCompletedOnboarding {
                         ContentView()
                             .environmentObject(authManager)
                             .environmentObject(bibleNavigator)
                             .onAppear { print("📱 Showing: ContentView") }
+                            .transition(.opacity)
                     } else {
                         OnboardingFlowView()
                             .environmentObject(authManager)
                             .environmentObject(bibleNavigator)
                             .onAppear { print("📱 Showing: OnboardingFlowView") }
+                            .transition(.opacity)
                     }
                 } else {
                     LoginView()
                         .environmentObject(authManager)
                         .environmentObject(bibleNavigator)
                         .onAppear { print("📱 Showing: LoginView") }
+                        .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.5), value: hasCompletedOnboarding)
+            .animation(.easeInOut(duration: 0.5), value: authManager.isAuthenticated)
+            .animation(.easeInOut(duration: 0.5), value: authManager.isLoading)
             .onChange(of: authManager.isAuthenticated) { newValue in
                 print("🔄 isAuthenticated changed to: \(newValue)")
             }
