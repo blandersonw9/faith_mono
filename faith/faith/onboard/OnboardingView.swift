@@ -7,59 +7,131 @@
 
 import SwiftUI
 
+struct GlowingHalo: View {
+    let progress: Double // 0.0 to 1.0
+    
+    var body: some View {
+        ZStack {
+            // Outer glow layers
+            Circle()
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            StyleGuide.gold.opacity(0.4 * progress),
+                            StyleGuide.gold.opacity(0.15 * progress),
+                            Color.clear
+                        ]),
+                        center: .center,
+                        startRadius: 30,
+                        endRadius: 70
+                    )
+                )
+                .frame(width: 140, height: 140)
+                .blur(radius: 12)
+            
+            // Middle glow
+            Circle()
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            StyleGuide.gold.opacity(0.6 * progress),
+                            StyleGuide.gold.opacity(0.25 * progress),
+                            Color.clear
+                        ]),
+                        center: .center,
+                        startRadius: 20,
+                        endRadius: 50
+                    )
+                )
+                .frame(width: 100, height: 100)
+                .blur(radius: 8)
+            
+            // Inner glow
+            Circle()
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            StyleGuide.gold.opacity(0.3 * progress),
+                            Color.clear
+                        ]),
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 35
+                    )
+                )
+                .frame(width: 70, height: 70)
+                .blur(radius: 4)
+            
+            // Cross Icon in the center
+            Image("crossFill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 45, height: 45)
+                .foregroundColor(StyleGuide.gold)
+        }
+        .animation(.easeInOut(duration: 0.8), value: progress)
+    }
+}
+
 struct AnimatedTypingText: View {
     let fullText: String
     let font: Font
     let color: Color
     let lineSpacing: CGFloat
     
-    @State private var visibleCharacters: Int = 0
+    @State private var displayedText: String = ""
+    @State private var opacity: Double = 0
     
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(fullText.enumerated()), id: \.offset) { index, character in
-                Text(String(character))
-                    .font(font)
-                    .foregroundColor(color)
-                    .opacity(index < visibleCharacters ? 1 : 0)
-                    .animation(.easeInOut(duration: 0.2), value: visibleCharacters)
+        Text(displayedText)
+            .font(font)
+            .foregroundColor(color)
+            .multilineTextAlignment(.leading)
+            .lineSpacing(lineSpacing)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(opacity)
+            .onAppear {
+                startTyping()
             }
-        }
-        .multilineTextAlignment(.leading)
-        .lineSpacing(lineSpacing)
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear {
-            startTyping()
-        }
     }
     
     private func startTyping() {
-        visibleCharacters = 0
-        typeNextCharacter()
-    }
-    
-    private func typeNextCharacter() {
-        guard visibleCharacters < fullText.count else { return }
+        displayedText = ""
+        opacity = 1
         
-        visibleCharacters += 1
+        let characters = Array(fullText)
+        var currentIndex = 0
         
-        // Use varying delays for a more natural flow
-        let baseDelay: Double = 0.035
-        let randomVariation = Double.random(in: -0.01...0.015)
-        let delay = baseDelay + randomVariation
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            typeNextCharacter()
+        func typeNext() {
+            guard currentIndex < characters.count else { return }
+            
+            withAnimation(.easeOut(duration: 0.15)) {
+                displayedText.append(characters[currentIndex])
+            }
+            currentIndex += 1
+            
+            // Use varying delays for a more natural flow
+            let baseDelay: Double = 0.03
+            let randomVariation = Double.random(in: -0.01...0.015)
+            let delay = baseDelay + randomVariation
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                typeNext()
+            }
         }
+        
+        typeNext()
     }
 }
 
-struct OnboardingView: View {
+struct OnboardingWelcomeView: View {
     @EnvironmentObject var authManager: AuthManager
+    let onContinue: () -> Void
+    
     @State private var gratitudeText: String = ""
-    @State private var isCompleted: Bool = false
     @FocusState private var isTextFieldFocused: Bool
+    @State private var haloProgress: Double = 0.33 // First page of 3 (page 1, page 2, loading)
     
     var body: some View {
         ZStack {
@@ -72,12 +144,8 @@ struct OnboardingView: View {
                 Spacer()
                     .frame(height: 80)
                 
-                // Cross Icon
-                Image("crossFill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 60, height: 60)
-                    .foregroundColor(StyleGuide.gold)
+                // Glowing Halo
+                GlowingHalo(progress: haloProgress)
                 
                 // Greeting Text
                 VStack(spacing: StyleGuide.spacing.lg) {
@@ -95,9 +163,9 @@ struct OnboardingView: View {
                 
                 // Continue Button
                 Button(action: {
-                    completeOnboarding()
+                    onContinue()
                 }) {
-                    Text("Continue")
+                    Text("Begin")
                 }
                 .primaryButtonStyle()
                 .padding(.horizontal, StyleGuide.spacing.xl)
@@ -116,27 +184,15 @@ struct OnboardingView: View {
     
     private var greetingText: String {
         if let firstName = authManager.userFirstName, !firstName.isEmpty {
-            return "Hi \(firstName)—I'm Faith, your companion. I'm here to walk with you. I'll ask a few quick questions to understand your journey and tailor your experience. Everything you share stays private."
+            return "Hi \(firstName)—I'm Faith, your spiritual companion. I'm here to walk with you. In under a minute, I'll shape a plan just for you."
         } else {
-            return "Hi there—I'm Faith, your companion. I'm here to walk with you. I'll ask a few quick questions to understand your journey and tailor your experience. Everything you share stays private."
+            return "Hi there—I'm Faith, your spiritual companion. I'm here to walk with you. In under a minute, I'll shape a plan just for you."
         }
     }
     
-    // MARK: - Actions
-    
-    private func completeOnboarding() {
-        // Save gratitude if provided
-        if !gratitudeText.isEmpty {
-            UserDefaults.standard.set(gratitudeText, forKey: "onboardingGratitude")
-        }
-        
-        // Mark onboarding as completed
-        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-        isCompleted = true
-    }
 }
 
 #Preview {
-    OnboardingView()
+    OnboardingWelcomeView(onContinue: {})
         .environmentObject(AuthManager())
 }
