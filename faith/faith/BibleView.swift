@@ -124,12 +124,10 @@ enum ReadingMode: String, CaseIterable {
             let horizontalPadding = geometry.size.width * 0.05
             
             VStack(spacing: 0) {
-                // Header with centered book/chapter selectors
+                // Header with book/chapter selectors
                 if showNavigationArrows {
                 HStack(spacing: 8) {
-                    Spacer()
-                    
-                    // Book and Chapter selector combined (centered)
+                    // Book and Chapter selector combined
                     HStack(spacing: 4) {
                         // Book name button
                         Button(action: {
@@ -137,19 +135,13 @@ enum ReadingMode: String, CaseIterable {
                             impactFeedback.impactOccurred()
                             showingBookPicker = true
                         }) {
-                            HStack(spacing: 6) {
-                                Text(bibleManager.currentBook > 0 ? 
-                                     "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book")" : 
-                                     "Select Book")
-                                    .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                                    .foregroundColor(readingMode.textColor)
-                                
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(readingMode.textColor.opacity(0.6))
-                            }
-                            .padding(.horizontal, StyleGuide.spacing.md)
-                            .padding(.vertical, StyleGuide.spacing.sm)
+                            Text(bibleManager.currentBook > 0 ? 
+                                 "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book")" : 
+                                 "Select Book")
+                                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                                .foregroundColor(readingMode.textColor)
+                                .padding(.horizontal, StyleGuide.spacing.md)
+                                .padding(.vertical, StyleGuide.spacing.sm)
                         }
                         .buttonStyle(PlainButtonStyle())
                         
@@ -164,17 +156,11 @@ enum ReadingMode: String, CaseIterable {
                             impactFeedback.impactOccurred()
                             showingChapterPicker = true
                         }) {
-                            HStack(spacing: 6) {
-                                Text("\(bibleManager.currentChapter)")
-                                    .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                                    .foregroundColor(readingMode.textColor)
-                                
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundColor(readingMode.textColor.opacity(0.6))
-                            }
-                            .padding(.horizontal, StyleGuide.spacing.md)
-                            .padding(.vertical, StyleGuide.spacing.sm)
+                            Text("\(bibleManager.currentChapter)")
+                                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                                .foregroundColor(readingMode.textColor)
+                                .padding(.horizontal, StyleGuide.spacing.md)
+                                .padding(.vertical, StyleGuide.spacing.sm)
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -245,6 +231,10 @@ enum ReadingMode: String, CaseIterable {
                         )
                     )
                 }
+            
+            // Spacer for visual separation
+            Spacer()
+                .frame(height: StyleGuide.spacing.md)
             
             // Bible content
             ScrollViewReader { scrollProxy in
