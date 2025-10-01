@@ -11,6 +11,7 @@ struct ChatView: View {
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @Binding var showingChat: Bool
     @Binding var selectedTab: Int
+    var initialPrompt: String? = nil
     @State private var messages: [ChatMessage] = [
         .init(id: UUID(), role: .system, text: "What's on your mind?")
     ]
@@ -191,6 +192,9 @@ struct ChatView: View {
                 isInputFocused = true
             }
             Task { await refreshSuggestions() }
+            if let prompt = initialPrompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Task { await sendMessageInternal(messageText: prompt) }
+            }
         }
     }
     
@@ -874,23 +878,13 @@ private struct ThinkingIndicator: View {
     @State private var animationPhase = 0
     
     var body: some View {
-        HStack(spacing: 4) {
-            Text("Thinking")
-                .font(StyleGuide.merriweather(size: 16))
-                .foregroundStyle(StyleGuide.mainBrown.opacity(0.7))
-            
-            AnimatedDotsView()
-        }
-        .overlay(
-            ShimmerView()
-                .mask(
-                    HStack(spacing: 4) {
-                        Text("Thinking")
-                            .font(StyleGuide.merriweather(size: 16))
+        AnimatedDotsView()
+            .overlay(
+                ShimmerView()
+                    .mask(
                         AnimatedDotsView()
-                    }
-                )
-        )
+                    )
+            )
     }
 }
 
