@@ -55,9 +55,6 @@ struct faithApp: App {
             .onAppear {
                 Config.logConfigStatus()
                 
-                // TESTING: Comment out after testing onboarding flow
-                UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
-                
                 // Remove UINavigationBar bottom hairline globally and make it transparent
                 let appearance = UINavigationBarAppearance()
                 appearance.configureWithTransparentBackground()

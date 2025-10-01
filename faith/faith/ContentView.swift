@@ -118,31 +118,33 @@ struct CustomTabView: View {
                 .frame(height: 1)
                 .frame(maxHeight: .infinity, alignment: .top)
             
+            // Tab buttons container
             HStack(spacing: 0) {
                 Spacer()
-
+                    .frame(maxWidth: 40)
+                
                 TabButton(
-                    icon: "house.fill",
+                    icon: "homeIcon",
                     title: "Home",
-                    isSelected: selectedTab == 0
+                    isSelected: selectedTab == 0,
+                    isSystemIcon: false
                 ) {
                     selectedTab = 0
                 }
                 
                 Spacer()
-
-                Spacer()
+                    .frame(maxWidth: 80)
                 
                 // Tab 2: Bible
                 TabButton(
-                    icon: "book.fill",
+                    icon: "bibleIcon",
                     title: "Bible",
-                    isSelected: selectedTab == 1
+                    isSelected: selectedTab == 1,
+                    isSystemIcon: false
                 ) {
                     selectedTab = 1
                 }
                 
-                Spacer()
                 Spacer()
                 
                 // Floating Circle Button
@@ -152,8 +154,27 @@ struct CustomTabView: View {
                 ) {
                     showingChat = true
                 }
+                
+                Spacer()
+                    .frame(maxWidth: 20)
             }
             .padding(.horizontal, StyleGuide.spacing.lg)
+            
+            // Animated pill indicator below icons
+            HStack(spacing: 0) {
+                Spacer()
+                    .frame(maxWidth: 40)
+                
+                Capsule()
+                    .fill(StyleGuide.mainBrown)
+                    .frame(width: 40, height: 2.5)
+                    .offset(x: selectedTab == 0 ? 20 : 180)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: selectedTab)
+                
+                Spacer()
+            }
+            .padding(.horizontal, StyleGuide.spacing.lg)
+            .padding(.top, 48)
         }
         .frame(height: barHeight + max(0, bottomInset))
         .ignoresSafeArea(edges: .bottom)
@@ -167,18 +188,45 @@ struct TabButton: View {
     let icon: String
     let title: String
     let isSelected: Bool
+    let isSystemIcon: Bool
     let action: () -> Void
+    
+    @State private var isPressed = false
     
     var body: some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 22))
-                .foregroundColor(isSelected ? StyleGuide.mainBrown : StyleGuide.mainBrown.opacity(0.5))
-                .frame(width: 80, height: 56, alignment: .top)
-                .padding(.top, 10)
+            Group {
+                if isSystemIcon {
+                    Image(systemName: icon)
+                        .font(.system(size: 22))
+                } else {
+                    Image(icon)
+                        .renderingMode(.template)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 32, height: 32)
+                }
+            }
+            .foregroundColor(isSelected ? StyleGuide.mainBrown : StyleGuide.mainBrown.opacity(0.5))
+            .frame(width: 80, height: 56)
+            .padding(.bottom, 8)
+            .scaleEffect(isPressed ? 0.85 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
         }
         .frame(width: 80, height: 56)
         .contentShape(Rectangle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isPressed {
+                        isPressed = true
+                    }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                }
+        )
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
 }
 
@@ -187,6 +235,8 @@ struct FloatingTabButton: View {
     let icon: String
     let isSystemIcon: Bool
     let action: () -> Void
+    
+    @State private var isPressed = false
     
     var body: some View {
         Button(action: action) {
@@ -215,10 +265,23 @@ struct FloatingTabButton: View {
                     // }
                 )
                 .shadow(color: StyleGuide.shadows.md, radius: 4, x: 0, y: 2)
+                .scaleEffect(isPressed ? 0.9 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
         }
         .frame(width: 60, height: 60)
         .contentShape(Circle())
         .offset(y: -30) // Center of circle aligned with top of tab bar
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isPressed {
+                        isPressed = true
+                    }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                }
+        )
     }
 }
 
