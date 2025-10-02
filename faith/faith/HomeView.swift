@@ -104,6 +104,7 @@ struct TodayContent: View {
 // MARK: - Weekly Streak View
 struct WeeklyStreakView: View {
     @ObservedObject var userDataManager: UserDataManager
+    @State private var showDropdown = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -117,9 +118,35 @@ struct WeeklyStreakView: View {
                 VStack(spacing: 16) {
                     // First row: NAME -------- Streak
                     HStack {
-                        Text(userDataManager.getDisplayName())
-                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                            .foregroundColor(StyleGuide.mainBrown)
+                        // Username dropdown button
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showDropdown.toggle()
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Text(userDataManager.getDisplayName())
+                                    .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                                    .foregroundColor(StyleGuide.mainBrown)
+                                
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                                    .rotationEffect(.degrees(showDropdown ? 180 : 0))
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .overlay(alignment: .topLeading) {
+                            // Dropdown menu - overlays content without affecting layout
+                            if showDropdown {
+                                UserDropdownMenu(
+                                    userDataManager: userDataManager,
+                                    showDropdown: $showDropdown
+                                )
+                                .offset(y: 28) // Position below the button
+                                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
+                            }
+                        }
                         
                         Spacer()
                         
@@ -134,6 +161,7 @@ struct WeeklyStreakView: View {
                                 .foregroundColor(StyleGuide.gold)
                         }
                     }
+                    .zIndex(showDropdown ? 10 : 0)
                     
                     // Second row: circles with each day of week
                     HStack(spacing: 8) {
@@ -239,4 +267,47 @@ enum DayState {
     case complete     // Day completed successfully
     case incomplete   // Day not completed (includes past and future)
     case current      // Current day
+}
+
+// MARK: - User Dropdown Menu
+struct UserDropdownMenu: View {
+    @ObservedObject var userDataManager: UserDataManager
+    @Binding var showDropdown: Bool
+    
+    // Access AuthManager from environment
+    @EnvironmentObject var authManager: AuthManager
+    
+    var body: some View {
+        Button(action: {
+            showDropdown = false
+            Task {
+                await authManager.signOut()
+            }
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                
+                Text("Sign Out")
+                    .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                    .foregroundColor(StyleGuide.mainBrown)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .frame(width: 140)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(StyleGuide.backgroundBeige)
+                .shadow(color: StyleGuide.mainBrown.opacity(0.15), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(StyleGuide.mainBrown.opacity(0.1), lineWidth: 1)
+        )
+    }
 }

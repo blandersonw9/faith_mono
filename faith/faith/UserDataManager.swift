@@ -146,13 +146,21 @@ class UserDataManager: ObservableObject {
     // MARK: - Helper Methods
     
     func getDisplayName() -> String {
-        // First try profile display_name, then authManager firstName, then default
+        // First try profile display_name, then authManager firstName, then UserDefaults, then default
         if let displayName = userProfile?.display_name, !displayName.isEmpty {
+            print("👤 Using profile display name: \(displayName)")
             return displayName
         }
         if let firstName = authManager?.userFirstName, !firstName.isEmpty {
+            print("👤 Using authManager first name: \(firstName)")
             return firstName
         }
+        // Fallback to UserDefaults in case authManager reference is weak/nil
+        if let savedFirstName = UserDefaults.standard.string(forKey: "userFirstName"), !savedFirstName.isEmpty {
+            print("👤 Using saved first name from UserDefaults: \(savedFirstName)")
+            return savedFirstName
+        }
+        print("👤 Falling back to 'Friend' - no first name found")
         return "Friend"
     }
     

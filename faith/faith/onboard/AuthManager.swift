@@ -47,6 +47,7 @@ class AuthManager: ObservableObject {
         
         // Load saved first name
         self.userFirstName = UserDefaults.standard.string(forKey: "userFirstName")
+        print("🔄 AuthManager init - loaded first name: \(self.userFirstName ?? "nil")")
         
         // Set initial loading state
         self.isLoading = true
