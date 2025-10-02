@@ -74,6 +74,73 @@ CREATE TABLE user_preferences (
 );
 
 -- =============================================
+-- ENUMS
+-- =============================================
+-- Create slide type enum for daily lessons
+CREATE TYPE slide_type_enum AS ENUM ('scripture', 'devotional', 'prayer');
+
+-- =============================================
+-- DAILY LESSONS TABLE
+-- =============================================
+-- Stores daily lesson metadata
+CREATE TABLE daily_lessons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lesson_date DATE UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  theme TEXT, -- e.g., "Forgiveness", "Hope", "Love"
+  description TEXT,
+  estimated_duration_minutes INTEGER DEFAULT 5,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- =============================================
+-- LESSON SLIDES TABLE
+-- =============================================
+-- Stores individual slides within each lesson
+CREATE TABLE lesson_slides (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lesson_id UUID REFERENCES daily_lessons(id) ON DELETE CASCADE,
+  slide_type slide_type_enum NOT NULL,
+  slide_index INTEGER NOT NULL, -- Global position in lesson (0, 1, 2...)
+  type_index INTEGER NOT NULL, -- Position within slide type (0, 1, 2...)
+  subtitle TEXT,
+  main_text TEXT NOT NULL,
+  verse_reference TEXT,
+  verse_text TEXT,
+  audio_url TEXT,
+  image_url TEXT,
+  background_color TEXT, -- For visual theming (hex color)
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  
+  -- Ensure unique slide ordering within lessons
+  UNIQUE(lesson_id, slide_index),
+  -- Ensure unique type ordering within lessons
+  UNIQUE(lesson_id, slide_type, type_index)
+);
+
+-- =============================================
+-- USER LESSON PROGRESS TABLE
+-- =============================================
+-- Tracks user progress through daily lessons
+CREATE TABLE user_lesson_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  lesson_id UUID REFERENCES daily_lessons(id) ON DELETE CASCADE,
+  current_slide_index INTEGER DEFAULT 0,
+  completed_slides INTEGER[] DEFAULT '{}', -- Array of completed slide indices
+  is_completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMP,
+  time_spent_seconds INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  
+  -- One progress record per user per lesson
+  UNIQUE(user_id, lesson_id)
+);
+
+-- =============================================
 -- INDEXES
 -- =============================================
 -- Add indexes for better query performance
@@ -99,6 +166,21 @@ CREATE INDEX idx_friendships_status ON friendships(status);
 -- User preferences indexes
 CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
 
+-- Daily lessons indexes
+CREATE INDEX idx_daily_lessons_date ON daily_lessons(lesson_date);
+CREATE INDEX idx_daily_lessons_theme ON daily_lessons(theme);
+
+-- Lesson slides indexes
+CREATE INDEX idx_lesson_slides_lesson_id ON lesson_slides(lesson_id);
+CREATE INDEX idx_lesson_slides_type ON lesson_slides(slide_type);
+CREATE INDEX idx_lesson_slides_lesson_type ON lesson_slides(lesson_id, slide_type);
+CREATE INDEX idx_lesson_slides_slide_index ON lesson_slides(lesson_id, slide_index);
+
+-- User lesson progress indexes
+CREATE INDEX idx_user_lesson_progress_user_id ON user_lesson_progress(user_id);
+CREATE INDEX idx_user_lesson_progress_lesson_id ON user_lesson_progress(lesson_id);
+CREATE INDEX idx_user_lesson_progress_completed ON user_lesson_progress(is_completed);
+
 -- =============================================
 -- TRIGGERS
 -- =============================================
@@ -122,6 +204,15 @@ CREATE TRIGGER update_user_progress_updated_at BEFORE UPDATE ON user_progress
 CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_daily_lessons_updated_at BEFORE UPDATE ON daily_lessons
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_lesson_slides_updated_at BEFORE UPDATE ON lesson_slides
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_lesson_progress_updated_at BEFORE UPDATE ON user_lesson_progress
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- =============================================
 -- ROW LEVEL SECURITY (RLS)
 -- =============================================
@@ -131,6 +222,9 @@ ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_completions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lesson_slides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_lesson_progress ENABLE ROW LEVEL SECURITY;
 
 -- =============================================
 -- RLS POLICIES
@@ -183,3 +277,21 @@ CREATE POLICY "Users can update own preferences" ON user_preferences
 
 CREATE POLICY "Users can insert own preferences" ON user_preferences
     FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Daily lessons policies - All authenticated users can read lessons
+CREATE POLICY "All users can view daily lessons" ON daily_lessons
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+
+-- Lesson slides policies - All authenticated users can read slides
+CREATE POLICY "All users can view lesson slides" ON lesson_slides
+    FOR SELECT USING (auth.uid() IS NOT NULL);
+
+-- User lesson progress policies - Users can only access their own progress
+CREATE POLICY "Users can view own lesson progress" ON user_lesson_progress
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own lesson progress" ON user_lesson_progress
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own lesson progress" ON user_lesson_progress
+    FOR UPDATE USING (auth.uid() = user_id);
