@@ -51,7 +51,7 @@ struct ContentView: View {
             // Main Content Area
             TabView(selection: $selectedTab) {
                 // Tab 1: Home
-                HomeView()
+                HomeView(authManager: authManager)
                     .tag(0)
                 
                 // Tab 2: Bible

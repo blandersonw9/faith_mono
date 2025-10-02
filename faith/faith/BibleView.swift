@@ -213,6 +213,7 @@ enum ReadingMode: String, CaseIterable {
                     ReadingSettingsMenu(
                         fontSize: $fontSize,
                         readingMode: $readingMode,
+                        bibleManager: bibleManager,
                         minFontSize: minFontSize,
                         maxFontSize: maxFontSize,
                         fontSizeStep: fontSizeStep,
@@ -1280,6 +1281,7 @@ private struct BottomDetectionPreferenceKey: PreferenceKey {
 private struct ReadingSettingsMenu: View {
     @Binding var fontSize: CGFloat
     @Binding var readingMode: ReadingMode
+    @ObservedObject var bibleManager: BibleManager
     let minFontSize: CGFloat
     let maxFontSize: CGFloat
     let fontSizeStep: CGFloat
@@ -1287,6 +1289,70 @@ private struct ReadingSettingsMenu: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Translation Section
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Translation")
+                    .font(StyleGuide.merriweather(size: 13, weight: .semibold))
+                    .foregroundColor(readingMode.textColor.opacity(0.7))
+                    .textCase(.uppercase)
+                    .tracking(0.5)
+                
+                HStack(spacing: 8) {
+                    ForEach(BibleTranslation.translations, id: \.id) { translation in
+                        Button(action: {
+                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                            impactFeedback.impactOccurred()
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                bibleManager.switchTranslation(translation)
+                            }
+                        }) {
+                            VStack(spacing: 4) {
+                                Text(translation.abbreviation)
+                                    .font(StyleGuide.merriweather(size: 15, weight: bibleManager.currentTranslation.id == translation.id ? .bold : .semibold))
+                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor : readingMode.textColor.opacity(0.5))
+                                
+                                Text(translation.name)
+                                    .font(StyleGuide.merriweather(size: 10, weight: .regular))
+                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.8) : readingMode.textColor.opacity(0.4))
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(bibleManager.currentTranslation.id == translation.id ? readingMode.cardBackground : Color.clear)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(
+                                        bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.3) : readingMode.textColor.opacity(0.1),
+                                        lineWidth: bibleManager.currentTranslation.id == translation.id ? 1.5 : 0.8
+                                    )
+                            )
+                            .shadow(color: bibleManager.currentTranslation.id == translation.id ? readingMode.shadowDark.opacity(0.15) : Color.clear, radius: 3, x: 0, y: 2)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+            
+            // Divider
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            readingMode.shadowLight.opacity(0.3),
+                            readingMode.textColor.opacity(0.08),
+                            readingMode.shadowLight.opacity(0.3)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 0.5)
+            
             // Reading Mode Section
             VStack(alignment: .leading, spacing: 10) {
                 Text("Reading Mode")

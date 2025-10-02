@@ -4,6 +4,12 @@ import Supabase
 
 // MARK: - Tab Content Views
 struct HomeView: View {
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var userDataManager: UserDataManager
+    
+    init(authManager: AuthManager) {
+        _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: authManager.supabase, authManager: authManager))
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -11,26 +17,42 @@ struct HomeView: View {
             
             ScrollView {
             VStack(spacing: StyleGuide.spacing.xl) {
+                // Top spacing to prevent cross cutoff
+                Spacer()
+                    .frame(height: 40)
+                
                 // Header with cross background
                 ZStack(alignment: .top) {
-                    // Cross - top aligned, 260px height
+                    // Cross - 220px height with proper spacing
                     Image("crossFill")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(height: 260)
+                        .frame(height: 220)
                         .foregroundColor(StyleGuide.gold)
                 }
                 
                 // Weekly Streak Section
-                WeeklyStreakView()
+                WeeklyStreakView(userDataManager: userDataManager)
                     .padding(.horizontal, horizontalPadding)
-                    .offset(y: -100)
+                    .offset(y: -80)
                 
                 // Today Content Section
                 TodayContent()
                     .padding(.horizontal, horizontalPadding)
-                    .offset(y: -100)
+                    .offset(y: -80)
+                
+                // Bottom spacing for better scrolling
+                Spacer()
+                    .frame(height: 40)
             }
+            }
+            .onAppear {
+                Task {
+                    await userDataManager.fetchUserData()
+                }
+            }
+            .refreshable {
+                await userDataManager.fetchUserData()
             }
         }
     }
@@ -81,10 +103,13 @@ struct TodayContent: View {
 
 // MARK: - Weekly Streak View
 struct WeeklyStreakView: View {
+    @ObservedObject var userDataManager: UserDataManager
+    
     var body: some View {
         GeometryReader { geometry in
             let screenWidth = geometry.size.width
             let streakWidth = screenWidth * 0.90
+            let dayStates = userDataManager.getWeekDayStates()
             
             HStack {
                 Spacer()
@@ -92,7 +117,7 @@ struct WeeklyStreakView: View {
                 VStack(spacing: 16) {
                     // First row: NAME -------- Streak
                     HStack {
-                        Text("Blake")
+                        Text(userDataManager.getDisplayName())
                             .font(StyleGuide.merriweather(size: 16, weight: .semibold))
                             .foregroundColor(StyleGuide.mainBrown)
                         
@@ -104,7 +129,7 @@ struct WeeklyStreakView: View {
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 20, height: 20)
                             
-                            Text("7")
+                            Text("\(userDataManager.getCurrentStreak())")
                                 .font(StyleGuide.merriweather(size: 16, weight: .semibold))
                                 .foregroundColor(StyleGuide.gold)
                         }
@@ -113,7 +138,7 @@ struct WeeklyStreakView: View {
                     // Second row: circles with each day of week
                     HStack(spacing: 8) {
                         ForEach(0..<7) { day in
-                            DayCircle(dayIndex: day)
+                            DayCircle(dayIndex: day, dayState: dayStates[day])
                         }
                     }
                 }
@@ -137,21 +162,11 @@ struct WeeklyStreakView: View {
 // MARK: - Day Circle
 struct DayCircle: View {
     let dayIndex: Int
+    let dayState: DayState
     
     private var dayAbbreviation: String {
         let days = ["S", "M", "T", "W", "T", "F", "S"]
         return days[dayIndex]
-    }
-    
-    private var dayState: DayState {
-        // Dummy data - in real app this would come from user data
-        switch dayIndex {
-        case 0, 1: return .complete       // Sunday, Monday - completed
-        case 2: return .incomplete        // Tuesday - incomplete (past)
-        case 3: return .current           // Wednesday - current day
-        case 4, 5, 6: return .incomplete  // Thursday, Friday, Saturday - incomplete (future)
-        default: return .incomplete
-        }
     }
     
     private var fillColor: Color {

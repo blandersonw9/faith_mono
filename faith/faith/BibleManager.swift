@@ -25,12 +25,78 @@ struct BibleVerse {
     }
 }
 
+struct BibleTranslation {
+    let id: String
+    let name: String
+    let abbreviation: String
+    let filename: String
+    let fileExtension: String
+    let tableName: String
+    let bookColumnName: String
+    
+    static let translations: [BibleTranslation] = [
+        BibleTranslation(
+            id: "kjv",
+            name: "King James Version",
+            abbreviation: "KJV",
+            filename: "kjv",
+            fileExtension: "sqlite",
+            tableName: "verses",
+            bookColumnName: "book"
+        ),
+        BibleTranslation(
+            id: "niv",
+            name: "New International Version",
+            abbreviation: "NIV",
+            filename: "niv",
+            fileExtension: "db",
+            tableName: "niv",
+            bookColumnName: "book_id"
+        ),
+        BibleTranslation(
+            id: "esv",
+            name: "English Standard Version",
+            abbreviation: "ESV",
+            filename: "esv",
+            fileExtension: "db",
+            tableName: "esv",
+            bookColumnName: "book_id"
+        ),
+        BibleTranslation(
+            id: "csb",
+            name: "Christian Standard Bible",
+            abbreviation: "CSB",
+            filename: "csb",
+            fileExtension: "db",
+            tableName: "csb",
+            bookColumnName: "book_id"
+        ),
+        BibleTranslation(
+            id: "nlt",
+            name: "New Living Translation",
+            abbreviation: "NLT",
+            filename: "nlt",
+            fileExtension: "db",
+            tableName: "nlt",
+            bookColumnName: "book_id"
+        )
+    ]
+    
+    static func getTranslation(byId id: String) -> BibleTranslation? {
+        return translations.first { $0.id == id }
+    }
+}
+
 class BibleManager: ObservableObject {
     @Published var verses: [BibleVerse] = []
     @Published var isLoading = false
     @Published var currentBook = 1
     @Published var currentChapter = 1
     @Published var errorMessage: String?
+    @Published var currentTranslation: BibleTranslation = {
+        let savedId = UserDefaults.standard.string(forKey: "bibleTranslation") ?? "kjv"
+        return BibleTranslation.getTranslation(byId: savedId) ?? BibleTranslation.translations[0]
+    }()
     
     private var db: OpaquePointer?
     
@@ -59,15 +125,36 @@ class BibleManager: ObservableObject {
     }
     
     private func openDatabase() {
-        guard let dbPath = Bundle.main.path(forResource: "kjv", ofType: "sqlite") else {
-            errorMessage = "Could not find Bible database"
+        // Close existing database if open
+        if db != nil {
+            sqlite3_close(db)
+            db = nil
+        }
+        
+        guard let dbPath = Bundle.main.path(forResource: currentTranslation.filename, ofType: currentTranslation.fileExtension) else {
+            errorMessage = "Could not find \(currentTranslation.abbreviation) Bible database"
+            #if DEBUG
+            print("Failed to find database: \(currentTranslation.filename).\(currentTranslation.fileExtension)")
+            #endif
             return
         }
         
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            errorMessage = "Could not open Bible database"
+            errorMessage = "Could not open \(currentTranslation.abbreviation) Bible database"
             return
         }
+        
+        #if DEBUG
+        print("Successfully opened \(currentTranslation.abbreviation) database at: \(dbPath)")
+        #endif
+    }
+    
+    func switchTranslation(_ translation: BibleTranslation) {
+        currentTranslation = translation
+        UserDefaults.standard.set(translation.id, forKey: "bibleTranslation")
+        openDatabase()
+        // Reload current chapter with new translation
+        loadVerses(book: currentBook, chapter: currentChapter)
     }
     
     private func closeDatabase() {
@@ -77,11 +164,12 @@ class BibleManager: ObservableObject {
     }
     
     func loadVerses(book: Int, chapter: Int) {
-        print("BibleManager.loadVerses called with: Book \(book), Chapter \(chapter)")
+        print("BibleManager.loadVerses called with: Book \(book), Chapter \(chapter), Translation: \(currentTranslation.abbreviation)")
         isLoading = true
         errorMessage = nil
         
-        let query = "SELECT id, book, chapter, verse, text FROM verses WHERE book = ? AND chapter = ? ORDER BY verse"
+        // Build query based on current translation's schema
+        let query = "SELECT id, \(currentTranslation.bookColumnName), chapter, verse, text FROM \(currentTranslation.tableName) WHERE \(currentTranslation.bookColumnName) = ? AND chapter = ? ORDER BY verse"
         var statement: OpaquePointer?
         
         if sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK {
@@ -115,17 +203,22 @@ class BibleManager: ObservableObject {
                 print("BibleManager updated: currentBook=\(self.currentBook), currentChapter=\(self.currentChapter), verses count=\(verses.count)")
             }
         } else {
+            let errorMsg = String(cString: sqlite3_errmsg(db))
             DispatchQueue.main.async {
-                self.errorMessage = "Error preparing query"
+                self.errorMessage = "Error preparing query: \(errorMsg)"
                 self.isLoading = false
             }
+            #if DEBUG
+            print("SQL Error: \(errorMsg)")
+            print("Query: \(query)")
+            #endif
         }
         
         sqlite3_finalize(statement)
     }
     
     func getAvailableChapters(for book: Int) -> [Int] {
-        let query = "SELECT DISTINCT chapter FROM verses WHERE book = ? ORDER BY chapter"
+        let query = "SELECT DISTINCT chapter FROM \(currentTranslation.tableName) WHERE \(currentTranslation.bookColumnName) = ? ORDER BY chapter"
         var statement: OpaquePointer?
         var chapters: [Int] = []
         
@@ -143,7 +236,7 @@ class BibleManager: ObservableObject {
     }
     
     func getAvailableBooks() -> [(id: Int, name: String)] {
-        let query = "SELECT DISTINCT book FROM verses ORDER BY book"
+        let query = "SELECT DISTINCT \(currentTranslation.bookColumnName) FROM \(currentTranslation.tableName) ORDER BY \(currentTranslation.bookColumnName)"
         var statement: OpaquePointer?
         var books: [(id: Int, name: String)] = []
         
