@@ -6,9 +6,11 @@ import Supabase
 struct HomeView: View {
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var userDataManager: UserDataManager
+    @StateObject private var dailyLessonManager: DailyLessonManager
     
     init(authManager: AuthManager) {
         _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: authManager.supabase, authManager: authManager))
+        _dailyLessonManager = StateObject(wrappedValue: DailyLessonManager(supabase: authManager.supabase))
     }
     
     var body: some View {
@@ -37,7 +39,7 @@ struct HomeView: View {
                     .offset(y: -80)
                 
                 // Today Content Section
-                TodayContent()
+                TodayContent(dailyLessonManager: dailyLessonManager)
                     .padding(.horizontal, horizontalPadding)
                     .offset(y: -80)
                 
@@ -49,10 +51,12 @@ struct HomeView: View {
             .onAppear {
                 Task {
                     await userDataManager.fetchUserData()
+                    await dailyLessonManager.fetchTodaysLesson()
                 }
             }
             .refreshable {
                 await userDataManager.fetchUserData()
+                await dailyLessonManager.fetchTodaysLesson()
             }
         }
     }
@@ -61,6 +65,8 @@ struct HomeView: View {
 
 // MARK: - Today Content
 struct TodayContent: View {
+    @ObservedObject var dailyLessonManager: DailyLessonManager
+    
     var body: some View {
         VStack(spacing: 28) {
             // TOP: Daily practice date
@@ -78,9 +84,7 @@ struct TodayContent: View {
                 .lineSpacing(12)
             
             // BOTTOM: Continue button
-            Button(action: {
-                // Continue action
-            }) {
+            NavigationLink(destination: DailyLessonSlideView(dailyLessonManager: dailyLessonManager)) {
                 Text("Continue")
                     .font(StyleGuide.merriweather(size: 14, weight: .semibold))
                     .foregroundColor(StyleGuide.mainBrown)
