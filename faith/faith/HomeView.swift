@@ -7,6 +7,7 @@ struct HomeView: View {
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var userDataManager: UserDataManager
     @StateObject private var dailyLessonManager: DailyLessonManager
+    @State private var showingProfile = false
     
     init(authManager: AuthManager) {
         _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: authManager.supabase, authManager: authManager))
@@ -14,50 +15,57 @@ struct HomeView: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            let horizontalPadding = geometry.size.width * 0.025
-            
-            ScrollView {
-            VStack(spacing: StyleGuide.spacing.xl) {
-                // Top spacing to prevent cross cutoff
-                Spacer()
-                    .frame(height: 40)
+        NavigationStack {
+            GeometryReader { geometry in
+                let horizontalPadding = geometry.size.width * 0.025
                 
-                // Header with cross background
-                ZStack(alignment: .top) {
-                    // Cross - 220px height with proper spacing
-                    Image("crossFill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(height: 220)
-                        .foregroundColor(StyleGuide.gold)
+                ScrollView {
+                VStack(spacing: StyleGuide.spacing.xl) {
+                    // Top spacing to prevent cross cutoff
+                    Spacer()
+                        .frame(height: 40)
+                    
+                    // Header with cross background
+                    ZStack(alignment: .top) {
+                        // Cross - 220px height with proper spacing
+                        Image("crossFill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 220)
+                            .foregroundColor(StyleGuide.gold)
+                    }
+                    
+                    // Weekly Streak Section
+                    WeeklyStreakView(userDataManager: userDataManager, showingProfile: $showingProfile)
+                        .padding(.horizontal, horizontalPadding)
+                        .offset(y: -80)
+                    
+                    // Today Content Section
+                    TodayContent(dailyLessonManager: dailyLessonManager)
+                        .padding(.horizontal, horizontalPadding)
+                        .offset(y: -80)
+                    
+                    // Bottom spacing for better scrolling
+                    Spacer()
+                        .frame(height: 40)
                 }
-                
-                // Weekly Streak Section
-                WeeklyStreakView(userDataManager: userDataManager)
-                    .padding(.horizontal, horizontalPadding)
-                    .offset(y: -80)
-                
-                // Today Content Section
-                TodayContent(dailyLessonManager: dailyLessonManager)
-                    .padding(.horizontal, horizontalPadding)
-                    .offset(y: -80)
-                
-                // Bottom spacing for better scrolling
-                Spacer()
-                    .frame(height: 40)
-            }
-            }
-            .onAppear {
-                Task {
+                }
+                .onAppear {
+                    Task {
+                        await userDataManager.fetchUserData()
+                        await dailyLessonManager.fetchTodaysLesson()
+                    }
+                }
+                .refreshable {
                     await userDataManager.fetchUserData()
                     await dailyLessonManager.fetchTodaysLesson()
                 }
             }
-            .refreshable {
-                await userDataManager.fetchUserData()
-                await dailyLessonManager.fetchTodaysLesson()
+            .navigationDestination(isPresented: $showingProfile) {
+                ProfileView(userDataManager: userDataManager)
+                    .environmentObject(authManager)
             }
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 }
@@ -108,7 +116,7 @@ struct TodayContent: View {
 // MARK: - Weekly Streak View
 struct WeeklyStreakView: View {
     @ObservedObject var userDataManager: UserDataManager
-    @State private var showDropdown = false
+    @Binding var showingProfile: Bool
     
     var body: some View {
         GeometryReader { geometry in
@@ -122,35 +130,21 @@ struct WeeklyStreakView: View {
                 VStack(spacing: 16) {
                     // First row: NAME -------- Streak
                     HStack {
-                        // Username dropdown button
+                        // Username button - navigates to profile
                         Button(action: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showDropdown.toggle()
-                            }
+                            showingProfile = true
                         }) {
                             HStack(spacing: 4) {
                                 Text(userDataManager.getDisplayName())
                                     .font(StyleGuide.merriweather(size: 16, weight: .semibold))
                                     .foregroundColor(StyleGuide.mainBrown)
                                 
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
-                                    .rotationEffect(.degrees(showDropdown ? 180 : 0))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.4))
                             }
                         }
                         .buttonStyle(PlainButtonStyle())
-                        .overlay(alignment: .topLeading) {
-                            // Dropdown menu - overlays content without affecting layout
-                            if showDropdown {
-                                UserDropdownMenu(
-                                    userDataManager: userDataManager,
-                                    showDropdown: $showDropdown
-                                )
-                                .offset(y: 28) // Position below the button
-                                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
-                            }
-                        }
                         
                         Spacer()
                         
@@ -165,7 +159,6 @@ struct WeeklyStreakView: View {
                                 .foregroundColor(StyleGuide.gold)
                         }
                     }
-                    .zIndex(showDropdown ? 10 : 0)
                     
                     // Second row: circles with each day of week
                     HStack(spacing: 8) {
@@ -271,47 +264,4 @@ enum DayState {
     case complete     // Day completed successfully
     case incomplete   // Day not completed (includes past and future)
     case current      // Current day
-}
-
-// MARK: - User Dropdown Menu
-struct UserDropdownMenu: View {
-    @ObservedObject var userDataManager: UserDataManager
-    @Binding var showDropdown: Bool
-    
-    // Access AuthManager from environment
-    @EnvironmentObject var authManager: AuthManager
-    
-    var body: some View {
-        Button(action: {
-            showDropdown = false
-            Task {
-                await authManager.signOut()
-            }
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: "rectangle.portrait.and.arrow.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
-                
-                Text("Sign Out")
-                    .font(StyleGuide.merriweather(size: 14, weight: .medium))
-                    .foregroundColor(StyleGuide.mainBrown)
-                
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .frame(width: 140)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(StyleGuide.backgroundBeige)
-                .shadow(color: StyleGuide.mainBrown.opacity(0.15), radius: 8, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(StyleGuide.mainBrown.opacity(0.1), lineWidth: 1)
-        )
-    }
 }
