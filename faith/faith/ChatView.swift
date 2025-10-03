@@ -645,7 +645,7 @@ struct UserBubble: View {
 }
 
 // MARK: - Basic Markdown Support
-private struct BasicMarkdownText: View {
+struct BasicMarkdownText: View {
     let text: String
     var enableLinking: Bool = true
     @EnvironmentObject var bibleNavigator: BibleNavigator

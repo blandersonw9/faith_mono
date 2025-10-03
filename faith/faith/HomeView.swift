@@ -74,6 +74,7 @@ struct HomeView: View {
 // MARK: - Today Content
 struct TodayContent: View {
     @ObservedObject var dailyLessonManager: DailyLessonManager
+    @State private var showLesson: Bool = false
     
     var body: some View {
         VStack(spacing: 28) {
@@ -91,8 +92,8 @@ struct TodayContent: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .lineSpacing(12)
             
-            // BOTTOM: Continue button
-            NavigationLink(destination: DailyLessonSlideView(dailyLessonManager: dailyLessonManager)) {
+            // BOTTOM: Continue button -> full screen cover story
+            Button(action: { showLesson = true }) {
                 Text("Continue")
                     .font(StyleGuide.merriweather(size: 14, weight: .semibold))
                     .foregroundColor(StyleGuide.mainBrown)
@@ -110,6 +111,10 @@ struct TodayContent: View {
                 .aspectRatio(contentMode: .fill)
         )
         .cornerRadius(12)
+        .fullScreenCover(isPresented: $showLesson) {
+            DailyLessonSlideView(dailyLessonManager: dailyLessonManager)
+                .ignoresSafeArea()
+        }
     }
 }
 
