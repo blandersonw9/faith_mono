@@ -5,13 +5,13 @@ import Supabase
 // MARK: - Tab Content Views
 struct HomeView: View {
     @EnvironmentObject var authManager: AuthManager
-    @StateObject private var userDataManager: UserDataManager
+    @EnvironmentObject var userDataManager: UserDataManager
     @StateObject private var dailyLessonManager: DailyLessonManager
     @State private var showingProfile = false
     
-    init(authManager: AuthManager) {
-        _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: authManager.supabase, authManager: authManager))
-        _dailyLessonManager = StateObject(wrappedValue: DailyLessonManager(supabase: authManager.supabase))
+    init() {
+        let auth = AuthManager()
+        _dailyLessonManager = StateObject(wrappedValue: DailyLessonManager(supabase: auth.supabase))
     }
     
     var body: some View {

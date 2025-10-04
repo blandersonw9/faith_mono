@@ -60,6 +60,7 @@ enum ReadingMode: String, CaseIterable {
 /// Primary Bible reading screen handling navigation, verse rendering, and in-verse actions.
 @MainActor struct BibleView: View {
     @EnvironmentObject var bibleNavigator: BibleNavigator
+    @EnvironmentObject var userDataManager: UserDataManager
     @StateObject private var bibleManager = BibleManager()
     @State private var showingBookPicker = false
     @State private var showingChapterPicker = false
@@ -84,6 +85,8 @@ enum ReadingMode: String, CaseIterable {
     @State private var animatedVerses: Set<Int> = [] // Track which verses have been animated
     @State private var horizontalDragOffset: CGFloat = 0
     @State private var isHorizontalDragging = false
+    @State private var showingAddNote = false
+    @State private var noteVerseForEdit: BibleVerse? = nil
     
     // Font size constants
     private let minFontSize: CGFloat = 12
@@ -420,12 +423,22 @@ enum ReadingMode: String, CaseIterable {
                                         .foregroundColor(readingMode.textColor.opacity(0.5))
                                         .frame(width: max(24, fontSize * 1.5), alignment: .trailing)
                                     
-                                    Text(LocalizedStringKey(cleanBibleText(verse.text)))
-                                        .font(StyleGuide.merriweather(size: fontSize, weight: .regular))
-                                        .foregroundColor(isSelected ? readingMode.textColor.opacity(0.95) : readingMode.textColor)
-                                        .lineSpacing(fontSize * 0.375)
-                                        .multilineTextAlignment(.leading)
-                                        .shadow(color: isSelected ? readingMode.shadowLight.opacity(0.5) : Color.clear, radius: 0.5, x: 0, y: 0.5)
+                                    HStack(alignment: .top, spacing: 6) {
+                                        Text(LocalizedStringKey(cleanBibleText(verse.text)))
+                                            .font(StyleGuide.merriweather(size: fontSize, weight: .regular))
+                                            .foregroundColor(isSelected ? readingMode.textColor.opacity(0.95) : readingMode.textColor)
+                                            .lineSpacing(fontSize * 0.375)
+                                            .multilineTextAlignment(.leading)
+                                            .shadow(color: isSelected ? readingMode.shadowLight.opacity(0.5) : Color.clear, radius: 0.5, x: 0, y: 0.5)
+                                        
+                                        // Note indicator icon - moved to the right side
+                                        if !userDataManager.getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse).isEmpty {
+                                            Image(systemName: "note.text")
+                                                .font(.system(size: fontSize * 0.75, weight: .semibold))
+                                                .foregroundColor(StyleGuide.gold.opacity(0.9))
+                                                .padding(.top, 2)
+                                        }
+                                    }
                                 }
                                 .padding(.horizontal, horizontalPadding + 4)
                                 .padding(.vertical, StyleGuide.spacing.sm)
@@ -594,6 +607,7 @@ enum ReadingMode: String, CaseIterable {
                         // Position menu using top-left offset
                         VerseActionMenu(
                             currentHighlightColor: verseHighlights[verse.id],
+                            existingNotes: userDataManager.getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse),
                             copyAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                 impactFeedback.impactOccurred()
@@ -645,9 +659,8 @@ enum ReadingMode: String, CaseIterable {
                             noteAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                 impactFeedback.impactOccurred()
-                                #if DEBUG
-                                print("Add note to verse: \(verse.book):\(verse.chapter):\(verse.verse)")
-                                #endif
+                                noteVerseForEdit = verse
+                                showingAddNote = true
                                 withAnimation { showActionMenu = false }
                             },
                             colorAction: { color in
@@ -730,6 +743,12 @@ enum ReadingMode: String, CaseIterable {
         .animation(.easeInOut(duration: 0.4), value: readingMode)
         .animation(.easeInOut(duration: 0.3), value: showNavigationArrows)
         .onAppear {
+            print("📖 BibleView appeared - refreshing notes")
+            // Refresh user data to get latest notes
+            Task {
+                await userDataManager.fetchUserData()
+            }
+            
             // Apply pending selection if any
             if let sel = bibleNavigator.pendingSelection {
                 targetVerse = sel.verse
@@ -795,6 +814,19 @@ enum ReadingMode: String, CaseIterable {
         }
         .sheet(isPresented: $showingChapterPicker) {
             ChapterPickerView(bibleManager: bibleManager)
+        }
+        .sheet(isPresented: $showingAddNote) {
+            if let verse = noteVerseForEdit {
+                AddNoteView(
+                    verse: verse,
+                    bibleManager: bibleManager,
+                    userDataManager: userDataManager,
+                    onDismiss: {
+                        showingAddNote = false
+                        noteVerseForEdit = nil
+                    }
+                )
+            }
         }
         .onTapGesture {
             // Tapping outside hides menus and deselects the verse
@@ -1228,6 +1260,7 @@ private struct TranslationMenu: View {
 /// Floating action menu anchored to a verse, providing copy, share, save, notes, and color highlight actions.
 private struct VerseActionMenu: View {
     let currentHighlightColor: Color?
+    let existingNotes: [VerseNote]
     let copyAction: () -> Void
     let interpretAction: () -> Void
     let shareAction: () -> Void
@@ -1304,14 +1337,103 @@ private struct VerseActionMenu: View {
             .opacity(buttonsVisible ? 1 : 0)
             .offset(x: buttonsVisible ? 0 : -10)
             
-            // Add note button
-            NeuromorphicMenuButton(
-                icon: "note.text",
-                title: "Add note",
-                action: noteAction
-            )
-            .opacity(buttonsVisible ? 1 : 0)
-            .offset(x: buttonsVisible ? 0 : -10)
+            // Note section - shows existing notes or "Add note" button
+            if existingNotes.isEmpty {
+                // Add note button (no notes yet)
+                NeuromorphicMenuButton(
+                    icon: "note.text",
+                    title: "Add note",
+                    action: noteAction
+                )
+                .opacity(buttonsVisible ? 1 : 0)
+                .offset(x: buttonsVisible ? 0 : -10)
+            } else {
+                // Show existing notes
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header
+                    HStack {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(StyleGuide.gold)
+                        Text("Your Notes")
+                            .font(StyleGuide.merriweather(size: 13, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 8)
+                    
+                    // Note cards - span full menu width
+                    VStack(spacing: 6) {
+                        ForEach(existingNotes.prefix(2)) { note in
+                            HStack(alignment: .center, spacing: 8) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(note.note_text)
+                                        .font(StyleGuide.merriweather(size: 13, weight: .regular))
+                                        .foregroundColor(StyleGuide.mainBrown.opacity(0.85))
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                    
+                                    HStack(spacing: 6) {
+                                        Text(note.relativeDate)
+                                            .font(StyleGuide.merriweather(size: 10, weight: .medium))
+                                            .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                                        
+                                        Text("•")
+                                            .foregroundColor(StyleGuide.mainBrown.opacity(0.3))
+                                        
+                                        Text("Tap to edit")
+                                            .font(StyleGuide.merriweather(size: 10, weight: .medium))
+                                            .foregroundColor(StyleGuide.gold.opacity(0.8))
+                                    }
+                                }
+                                
+                                Spacer(minLength: 0)
+                                
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(StyleGuide.gold.opacity(0.6))
+                            }
+                            .padding(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.white.opacity(0.4),
+                                                Color.white.opacity(0.2)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(StyleGuide.gold.opacity(0.25), lineWidth: 0.8)
+                            )
+                            .onTapGesture {
+                                noteAction()
+                            }
+                        }
+                    }
+                    
+                    if existingNotes.count > 2 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.4))
+                            Text("\(existingNotes.count - 2) more note\(existingNotes.count - 2 == 1 ? "" : "s")")
+                                .font(StyleGuide.merriweather(size: 11, weight: .medium))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                        }
+                        .padding(.top, 6)
+                        .padding(.horizontal, 18)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .opacity(buttonsVisible ? 1 : 0)
+                .offset(x: buttonsVisible ? 0 : -10)
+            }
             
             // Glassmorphic divider
             Rectangle()
@@ -1746,6 +1868,369 @@ private struct ReadingSettingsMenu: View {
         .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
         // Subtle highlight on top edge
         .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
+    }
+}
+
+// MARK: - Add Note View
+/// Sheet for adding or editing notes on Bible verses
+struct AddNoteView: View {
+    let verse: BibleVerse
+    let bibleManager: BibleManager
+    @ObservedObject var userDataManager: UserDataManager
+    let onDismiss: () -> Void
+    
+    @State private var noteText: String = ""
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String? = nil
+    @State private var existingNotes: [VerseNote] = []
+    @State private var selectedNoteId: UUID? = nil
+    @Environment(\.dismiss) private var dismiss
+    
+    private var verseReference: String {
+        "\(BibleManager.bookNames[verse.book] ?? "Unknown") \(verse.chapter):\(verse.verse)"
+    }
+    
+    private var verseText: String {
+        verse.text
+            .replacingOccurrences(of: "\\[([^\\]]+)\\]", with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: "¶", with: "")
+            .replacingOccurrences(of: "\\{[^}]*\\}", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: StyleGuide.spacing.lg) {
+                    // Verse Reference
+                    VStack(alignment: .leading, spacing: StyleGuide.spacing.md) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "book.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(StyleGuide.gold)
+                            
+                            Text(verseReference)
+                                .font(StyleGuide.merriweather(size: 18, weight: .bold))
+                                .foregroundColor(StyleGuide.mainBrown)
+                            
+                            Spacer()
+                            
+                            if let translation = bibleManager.currentTranslation.abbreviation as String? {
+                                Text(translation)
+                                    .font(StyleGuide.merriweather(size: 12, weight: .semibold))
+                                    .foregroundColor(StyleGuide.gold.opacity(0.8))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(StyleGuide.gold.opacity(0.15))
+                                    )
+                            }
+                        }
+                        
+                        Text(verseText)
+                            .font(StyleGuide.merriweather(size: 14, weight: .regular))
+                            .foregroundColor(StyleGuide.mainBrown.opacity(0.75))
+                            .lineSpacing(6)
+                            .padding(StyleGuide.spacing.md)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                StyleGuide.gold.opacity(0.08),
+                                                StyleGuide.gold.opacity(0.12)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(StyleGuide.gold.opacity(0.2), lineWidth: 1)
+                            )
+                    }
+                    .padding(.horizontal, StyleGuide.spacing.lg)
+                    .padding(.top, StyleGuide.spacing.md)
+                    
+                    // Existing Notes Section (if any)
+                    if !existingNotes.isEmpty {
+                        VStack(alignment: .leading, spacing: StyleGuide.spacing.sm) {
+                            HStack {
+                                Text("Existing Notes")
+                                    .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                                    .textCase(.uppercase)
+                                    .tracking(0.5)
+                                
+                                Spacer()
+                                
+                                Text("\(existingNotes.count)")
+                                    .font(StyleGuide.merriweather(size: 13, weight: .bold))
+                                    .foregroundColor(StyleGuide.gold)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(StyleGuide.gold.opacity(0.15))
+                                    )
+                            }
+                            
+                            ForEach(existingNotes) { note in
+                                Button(action: {
+                                    selectedNoteId = note.id
+                                    noteText = note.note_text
+                                }) {
+                                    HStack(alignment: .top, spacing: 12) {
+                                        // Note icon
+                                        Image(systemName: selectedNoteId == note.id ? "note.text" : "note.text")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(selectedNoteId == note.id ? StyleGuide.gold : StyleGuide.mainBrown.opacity(0.4))
+                                            .frame(width: 24)
+                                        
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(note.note_text)
+                                                .font(StyleGuide.merriweather(size: 14, weight: .regular))
+                                                .foregroundColor(StyleGuide.mainBrown)
+                                                .lineLimit(3)
+                                                .multilineTextAlignment(.leading)
+                                            
+                                            HStack(spacing: 8) {
+                                                Text(note.relativeDate)
+                                                    .font(StyleGuide.merriweather(size: 11, weight: .medium))
+                                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                                                
+                                                if let translation = note.translation {
+                                                    Text("•")
+                                                        .foregroundColor(StyleGuide.mainBrown.opacity(0.3))
+                                                    Text(translation)
+                                                        .font(StyleGuide.merriweather(size: 11, weight: .medium))
+                                                        .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                                                }
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        if selectedNoteId == note.id {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(StyleGuide.gold)
+                                        }
+                                    }
+                                    .padding(StyleGuide.spacing.md)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(selectedNoteId == note.id ? StyleGuide.gold.opacity(0.12) : Color.white.opacity(0.6))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .stroke(selectedNoteId == note.id ? StyleGuide.gold.opacity(0.4) : StyleGuide.mainBrown.opacity(0.08), lineWidth: 1.5)
+                                    )
+                                    .shadow(color: StyleGuide.shadows.sm, radius: 2, x: 0, y: 1)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        deleteNote(note)
+                                    } label: {
+                                        Label("Delete Note", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, StyleGuide.spacing.lg)
+                    }
+                    
+                    // Note Input
+                    VStack(alignment: .leading, spacing: StyleGuide.spacing.sm) {
+                        HStack {
+                            Text(selectedNoteId != nil ? "Edit Note" : "New Note")
+                                .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+                            
+                            Spacer()
+                            
+                            if selectedNoteId != nil {
+                                Button(action: {
+                                    selectedNoteId = nil
+                                    noteText = ""
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 14))
+                                        Text("New")
+                                            .font(StyleGuide.merriweather(size: 12, weight: .semibold))
+                                    }
+                                    .foregroundColor(StyleGuide.gold)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(StyleGuide.gold.opacity(0.15))
+                                    )
+                                }
+                            }
+                        }
+                        
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.white.opacity(0.8))
+                            
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(noteText.isEmpty ? StyleGuide.mainBrown.opacity(0.15) : StyleGuide.gold.opacity(0.3), lineWidth: 1.5)
+                            
+                            if noteText.isEmpty {
+                                Text("Type your note here...")
+                                    .font(StyleGuide.merriweather(size: 15))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.3))
+                                    .padding(.top, 20)
+                                    .padding(.leading, 18)
+                            }
+                            
+                            TextEditor(text: $noteText)
+                                .font(StyleGuide.merriweather(size: 15))
+                                .foregroundColor(StyleGuide.mainBrown)
+                                .padding(12)
+                                .frame(minHeight: 180)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                        }
+                        .shadow(color: StyleGuide.shadows.sm, radius: 3, x: 0, y: 2)
+                    }
+                    .padding(.horizontal, StyleGuide.spacing.lg)
+                    
+                    // Error Message
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(StyleGuide.merriweather(size: 13))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .background(Image("background").resizable().aspectRatio(contentMode: .fill).ignoresSafeArea())
+            .navigationTitle(existingNotes.isEmpty ? "Add Note" : "Edit Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // Load existing notes for this verse
+                existingNotes = userDataManager.getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse)
+                // If there's exactly one note, select it automatically
+                if existingNotes.count == 1, let firstNote = existingNotes.first {
+                    selectedNoteId = firstNote.id
+                    noteText = firstNote.note_text
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onDismiss()
+                        dismiss()
+                    }
+                    .foregroundColor(StyleGuide.mainBrown)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: saveNote) {
+                        if isSaving {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: StyleGuide.mainBrown))
+                        } else {
+                            Text("Save")
+                                .fontWeight(.semibold)
+                                .foregroundColor(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? StyleGuide.mainBrown.opacity(0.3) : StyleGuide.mainBrown)
+                        }
+                    }
+                    .disabled(noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                }
+            }
+        }
+    }
+    
+    private func saveNote() {
+        guard !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        
+        isSaving = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                if let noteId = selectedNoteId {
+                    // Update existing note
+                    try await userDataManager.updateVerseNote(noteId: noteId, noteText: noteText)
+                } else {
+                    // Create new note
+                    try await userDataManager.addVerseNote(
+                        book: verse.book,
+                        chapter: verse.chapter,
+                        verse: verse.verse,
+                        noteText: noteText,
+                        translation: bibleManager.currentTranslation.abbreviation
+                    )
+                }
+                
+                // Success feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                
+                await MainActor.run {
+                    onDismiss()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to save note: \(error.localizedDescription)"
+                    isSaving = false
+                }
+                
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+            }
+        }
+    }
+    
+    private func deleteNote(_ note: VerseNote) {
+        Task {
+            do {
+                try await userDataManager.deleteVerseNote(noteId: note.id)
+                
+                await MainActor.run {
+                    // Remove from local array
+                    existingNotes.removeAll { $0.id == note.id }
+                    
+                    // If we were editing this note, clear the form
+                    if selectedNoteId == note.id {
+                        selectedNoteId = nil
+                        noteText = ""
+                    }
+                    
+                    // If no notes left, dismiss
+                    if existingNotes.isEmpty && noteText.isEmpty {
+                        onDismiss()
+                        dismiss()
+                    }
+                }
+                
+                // Success feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to delete note: \(error.localizedDescription)"
+                }
+                
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
+            }
+        }
     }
 }
 

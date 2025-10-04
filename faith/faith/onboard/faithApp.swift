@@ -12,7 +12,15 @@ import UIKit
 struct faithApp: App {
     @StateObject private var authManager = AuthManager()
     @StateObject private var bibleNavigator = BibleNavigator()
+    @StateObject private var userDataManager: UserDataManager
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    
+    init() {
+        let auth = AuthManager()
+        _authManager = StateObject(wrappedValue: auth)
+        _bibleNavigator = StateObject(wrappedValue: BibleNavigator())
+        _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: auth.supabase, authManager: auth))
+    }
     
     var body: some Scene {
         WindowGroup {
@@ -26,12 +34,18 @@ struct faithApp: App {
                         ContentView()
                             .environmentObject(authManager)
                             .environmentObject(bibleNavigator)
-                            .onAppear { print("📱 Showing: ContentView") }
+                            .environmentObject(userDataManager)
+                            .task {
+                                print("📱 Showing: ContentView - Loading user data")
+                                // Fetch user data when authenticated
+                                await userDataManager.fetchUserData()
+                            }
                             .transition(.opacity)
                     } else {
                         OnboardingFlowView()
                             .environmentObject(authManager)
                             .environmentObject(bibleNavigator)
+                            .environmentObject(userDataManager)
                             .onAppear { print("📱 Showing: OnboardingFlowView") }
                             .transition(.opacity)
                     }

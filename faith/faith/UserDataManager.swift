@@ -40,12 +40,75 @@ struct DailyCompletion: Codable {
     let xp_earned: Int
 }
 
+struct VerseNote: Codable, Identifiable {
+    let id: UUID
+    let user_id: UUID
+    let book: Int
+    let chapter: Int
+    let verse: Int
+    let note_text: String
+    let translation: String?
+    let created_at: String
+    let updated_at: String
+    
+    var verseReference: String {
+        let bookName = BibleManager.bookNames[book] ?? "Unknown"
+        return "\(bookName) \(chapter):\(verse)"
+    }
+    
+    var formattedDate: String {
+        // Try parsing with fractional seconds first
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: created_at) {
+            let displayFormatter = DateFormatter()
+            displayFormatter.dateStyle = .medium
+            displayFormatter.timeStyle = .short
+            return displayFormatter.string(from: date)
+        }
+        
+        // Fallback to standard format without fractional seconds
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: created_at) {
+            let displayFormatter = DateFormatter()
+            displayFormatter.dateStyle = .medium
+            displayFormatter.timeStyle = .short
+            return displayFormatter.string(from: date)
+        }
+        
+        return "Recently"
+    }
+    
+    var relativeDate: String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: created_at) {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            return formatter.localizedString(for: date, relativeTo: Date())
+        }
+        
+        // Fallback
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: created_at) {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            return formatter.localizedString(for: date, relativeTo: Date())
+        }
+        
+        return "Just now"
+    }
+}
+
 // MARK: - User Data Manager
 
 class UserDataManager: ObservableObject {
     @Published var userProfile: UserProfile?
     @Published var userProgress: UserProgress?
     @Published var dailyCompletions: [DailyCompletion] = []
+    @Published var verseNotes: [VerseNote] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
@@ -62,35 +125,72 @@ class UserDataManager: ObservableObject {
     
     @MainActor
     func fetchUserData() async {
+        print("🔄 Starting fetchUserData...")
         isLoading = true
         errorMessage = nil
         
         do {
+            print("🔄 Getting auth session...")
             let session = try await supabase.auth.session
             let userId = session.user.id
+            print("🔄 User ID: \(userId)")
             
-            // Fetch all data concurrently
+            // Fetch all data independently - don't let one failure stop others
             async let profileTask = fetchProfile(userId: userId)
             async let progressTask = fetchProgress(userId: userId)
             async let completionsTask = fetchDailyCompletions(userId: userId)
+            async let notesTask = fetchVerseNotes(userId: userId)
             
-            let (profile, progress, completions) = try await (profileTask, progressTask, completionsTask)
+            // Fetch profile (optional - app works without it)
+            do {
+                let profile = try await profileTask
+                self.userProfile = profile
+                print("✅ Profile: \(profile.display_name)")
+            } catch {
+                print("⚠️ Profile not found (optional): \(error.localizedDescription)")
+                self.userProfile = nil
+            }
             
-            self.userProfile = profile
-            self.userProgress = progress
-            self.dailyCompletions = completions
+            // Fetch progress (optional)
+            do {
+                let progress = try await progressTask
+                self.userProgress = progress
+                print("✅ Current streak: \(progress?.current_streak ?? 0)")
+            } catch {
+                print("⚠️ Progress not found (optional): \(error.localizedDescription)")
+                self.userProgress = nil
+            }
             
-            print("✅ Loaded user data:")
-            print("   Profile: \(profile.display_name)")
-            print("   Current streak: \(progress?.current_streak ?? 0)")
-            print("   Daily completions: \(completions.count)")
+            // Fetch completions (optional)
+            do {
+                let completions = try await completionsTask
+                self.dailyCompletions = completions
+                print("✅ Daily completions: \(completions.count)")
+            } catch {
+                print("⚠️ Completions not found (optional): \(error.localizedDescription)")
+                self.dailyCompletions = []
+            }
+            
+            // Fetch notes (critical for this feature)
+            do {
+                let notes = try await notesTask
+                self.verseNotes = notes
+                print("✅ Verse notes: \(notes.count)")
+            } catch {
+                print("⚠️ Notes fetch error: \(error.localizedDescription)")
+                self.verseNotes = []
+            }
+            
+            print("✅ Finished loading user data successfully")
             
         } catch {
-            print("❌ Error fetching user data: \(error)")
+            print("❌ Error getting auth session: \(error)")
+            print("❌ Error details: \(error.localizedDescription)")
             self.errorMessage = error.localizedDescription
         }
         
         isLoading = false
+        print("🔄 Finished fetchUserData")
     }
     
     // MARK: - Individual Fetch Methods
@@ -254,6 +354,112 @@ class UserDataManager: ObservableObject {
         
         // Refresh data
         await fetchUserData()
+    }
+    
+    // MARK: - Verse Notes Methods
+    
+    private func fetchVerseNotes(userId: UUID) async throws -> [VerseNote] {
+        print("📝 Fetching verse notes for user: \(userId)")
+        let response: [VerseNote] = try await supabase
+            .from("verse_notes")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+        
+        print("📝 Fetched \(response.count) verse notes")
+        return response
+    }
+    
+    @MainActor
+    func addVerseNote(book: Int, chapter: Int, verse: Int, noteText: String, translation: String?) async throws {
+        let session = try await supabase.auth.session
+        let userId = session.user.id
+        
+        struct NoteInsert: Encodable {
+            let user_id: UUID
+            let book: Int
+            let chapter: Int
+            let verse: Int
+            let note_text: String
+            let translation: String?
+        }
+        
+        let note = NoteInsert(
+            user_id: userId,
+            book: book,
+            chapter: chapter,
+            verse: verse,
+            note_text: noteText,
+            translation: translation
+        )
+        
+        let response: [VerseNote] = try await supabase
+            .from("verse_notes")
+            .insert(note)
+            .select()
+            .execute()
+            .value
+        
+        // Add to local array
+        if let newNote = response.first {
+            verseNotes.insert(newNote, at: 0)
+        }
+        
+        print("✅ Added verse note for \(BibleManager.bookNames[book] ?? "Unknown") \(chapter):\(verse)")
+    }
+    
+    @MainActor
+    func updateVerseNote(noteId: UUID, noteText: String) async throws {
+        struct NoteUpdate: Encodable {
+            let note_text: String
+        }
+        
+        let update = NoteUpdate(note_text: noteText)
+        
+        try await supabase
+            .from("verse_notes")
+            .update(update)
+            .eq("id", value: noteId.uuidString)
+            .execute()
+        
+        // Update local array
+        if let index = verseNotes.firstIndex(where: { $0.id == noteId }) {
+            // Refresh the specific note
+            let response: [VerseNote] = try await supabase
+                .from("verse_notes")
+                .select()
+                .eq("id", value: noteId.uuidString)
+                .execute()
+                .value
+            
+            if let updatedNote = response.first {
+                verseNotes[index] = updatedNote
+            }
+        }
+        
+        print("✅ Updated verse note")
+    }
+    
+    @MainActor
+    func deleteVerseNote(noteId: UUID) async throws {
+        try await supabase
+            .from("verse_notes")
+            .delete()
+            .eq("id", value: noteId.uuidString)
+            .execute()
+        
+        // Remove from local array
+        verseNotes.removeAll { $0.id == noteId }
+        
+        print("✅ Deleted verse note")
+    }
+    
+    func getNotesForVerse(book: Int, chapter: Int, verse: Int) -> [VerseNote] {
+        return verseNotes.filter { note in
+            note.book == book && note.chapter == chapter && note.verse == verse
+        }
     }
 }
 

@@ -9,7 +9,7 @@ import Foundation
 import SQLite3
 import Combine
 
-struct BibleVerse {
+struct BibleVerse: Equatable {
     let id: Int
     let book: Int
     let chapter: Int

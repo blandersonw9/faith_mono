@@ -11,9 +11,11 @@ import Supabase
 struct ContentView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bibleNavigator: BibleNavigator
+    @EnvironmentObject var userDataManager: UserDataManager
     @State private var selectedTab = 0
     @State private var showingChat = false
     @State private var initialChatPrompt: String? = nil
+    @Environment(\.scenePhase) private var scenePhase
     // Mirror BibleView's reading mode so we can color the parent background
     @State private var bibleReadingMode: ReadingMode = {
         if let saved = UserDefaults.standard.string(forKey: "bibleReadingMode"),
@@ -52,7 +54,7 @@ struct ContentView: View {
             Group {
                 if selectedTab == 0 {
                     // Tab 1: Home
-                    HomeView(authManager: authManager)
+                    HomeView()
                 } else if selectedTab == 1 {
                     // Tab 2: Bible
                     BibleView()
@@ -90,6 +92,23 @@ struct ContentView: View {
             if let prompt = note.object as? String {
                 initialChatPrompt = prompt
                 showingChat = true
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                print("📱 App became active - refreshing user data")
+                // Refresh user data when app becomes active
+                Task {
+                    await userDataManager.fetchUserData()
+                }
+            }
+        }
+        .onChange(of: authManager.isAuthenticated) { isAuth in
+            if isAuth {
+                print("📱 Auth status changed to authenticated - loading user data")
+                Task {
+                    await userDataManager.fetchUserData()
+                }
             }
         }
         // No bottom safe-area inset. We're manually overlaying the bar instead.

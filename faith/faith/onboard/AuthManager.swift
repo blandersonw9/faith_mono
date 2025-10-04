@@ -67,6 +67,11 @@ class AuthManager: ObservableObject {
             let session = try await supabase.auth.session
             self.user = session.user
             self.isAuthenticated = session.user != nil
+            
+            // If authenticated, ensure profile exists
+            if self.isAuthenticated {
+                await ensureProfileExists()
+            }
         } catch {
             // sessionMissing is normal when user is not logged in
             if error.localizedDescription.contains("sessionMissing") {
@@ -89,6 +94,79 @@ class AuthManager: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    // MARK: - Profile Management
+    @MainActor
+    func ensureProfileExists() async {
+        do {
+            let session = try await supabase.auth.session
+            let userId = session.user.id
+            let email = session.user.email ?? ""
+            
+            // Check if profile already exists
+            let existing: [UserProfile] = try await supabase
+                .from("profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .execute()
+                .value
+            
+            if existing.isEmpty {
+                print("📝 Creating profile for new user: \(userId)")
+                
+                // Generate username from email
+                let username = email.components(separatedBy: "@").first ?? "user_\(UUID().uuidString.prefix(8))"
+                
+                // Create the profile
+                struct ProfileInsert: Encodable {
+                    let id: UUID
+                    let username: String
+                    let display_name: String
+                }
+                
+                let displayName = userFirstName ?? username
+                let profile = ProfileInsert(
+                    id: userId,
+                    username: username,
+                    display_name: displayName
+                )
+                
+                try await supabase
+                    .from("profiles")
+                    .insert(profile)
+                    .execute()
+                
+                // Create initial user progress
+                struct ProgressInsert: Encodable {
+                    let user_id: UUID
+                    let current_streak: Int
+                    let longest_streak: Int
+                    let total_xp: Int
+                    let current_level: Int
+                }
+                
+                let progress = ProgressInsert(
+                    user_id: userId,
+                    current_streak: 0,
+                    longest_streak: 0,
+                    total_xp: 0,
+                    current_level: 1
+                )
+                
+                try await supabase
+                    .from("user_progress")
+                    .insert(progress)
+                    .execute()
+                
+                print("✅ Profile and progress created successfully")
+            } else {
+                print("✅ Profile already exists")
+            }
+        } catch {
+            print("⚠️ Error ensuring profile exists: \(error)")
+            // Don't throw - app should work without profile
+        }
     }
     
     // MARK: - Google Sign-In
@@ -140,6 +218,9 @@ class AuthManager: ObservableObject {
             } else {
                 print("⚠️ No first name available from Google")
             }
+            
+            // Ensure profile exists in database
+            await ensureProfileExists()
             
         } catch {
             print("❌ Google Sign-In error: \(error)")
@@ -235,6 +316,9 @@ class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAut
                         UserDefaults.standard.set(firstName, forKey: "userFirstName")
                         print("✅ Saved user first name: \(firstName)")
                     }
+                    
+                    // Ensure profile exists in database
+                    await authManager.ensureProfileExists()
                     
                     authManager.isLoading = false
                     
