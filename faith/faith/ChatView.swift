@@ -35,6 +35,9 @@ struct ChatView: View {
         static let bottomFadeHeight: CGFloat = 24
     }
     
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging = false
+    
     var body: some View {
         VStack(spacing: 0) {
             // Top bar with chevron left
@@ -154,6 +157,45 @@ struct ChatView: View {
             .background(Color.clear)
         }
         .background(StyleGuide.backgroundBeige.ignoresSafeArea())
+        .offset(x: dragOffset)
+        .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: dragOffset)
+        .gesture(
+            DragGesture(minimumDistance: 10, coordinateSpace: .global)
+                .onChanged { value in
+                    // Only respond to swipes starting from the left edge
+                    guard value.startLocation.x < UI.leftEdgeSwipeWidth else { return }
+                    
+                    // Only respond to rightward swipes with minimal vertical movement
+                    let dx = value.translation.width
+                    let dy = abs(value.translation.height)
+                    
+                    guard dx > 0, dy < UI.backSwipeDYTolerance else { return }
+                    
+                    isDragging = true
+                    dragOffset = min(dx, 300) // Cap the drag distance
+                }
+                .onEnded { value in
+                    guard isDragging else { return }
+                    
+                    let dx = value.translation.width
+                    let dy = abs(value.translation.height)
+                    
+                    isDragging = false
+                    
+                    // Dismiss if dragged far enough to the right
+                    if dx > UI.backSwipeTriggerDx && dy < UI.backSwipeDYTolerance {
+                        // Dismiss immediately - let NavigationStack handle the transition
+                        showingChat = false
+                        // Reset offset after navigation completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            dragOffset = 0
+                        }
+                    } else {
+                        // Spring back if not dragged far enough
+                        dragOffset = 0
+                    }
+                }
+        )
         .environment(\.openURL, OpenURLAction { url in
             if url.scheme == "faithbible" {
                 if let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -176,7 +218,6 @@ struct ChatView: View {
             }
             return .systemAction
         })
-        // No root drag gesture; preserve link taps
         
         .sheet(isPresented: $showingHistory) {
             ChatHistoryView(

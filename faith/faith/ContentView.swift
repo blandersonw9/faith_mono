@@ -49,17 +49,15 @@ struct ContentView: View {
             
             
             // Main Content Area
-            TabView(selection: $selectedTab) {
-                // Tab 1: Home
-                HomeView(authManager: authManager)
-                    .tag(0)
-                
-                // Tab 2: Bible
-                BibleView()
-                    .tag(1)
+            Group {
+                if selectedTab == 0 {
+                    // Tab 1: Home
+                    HomeView(authManager: authManager)
+                } else if selectedTab == 1 {
+                    // Tab 2: Bible
+                    BibleView()
+                }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .gesture(DragGesture().onChanged { _ in })
             }
             // Place the custom tab bar at the absolute bottom and, for the Bible tab only,
             // slide it down to cover the device's bottom inset

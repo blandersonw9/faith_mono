@@ -63,6 +63,7 @@ enum ReadingMode: String, CaseIterable {
     @StateObject private var bibleManager = BibleManager()
     @State private var showingBookPicker = false
     @State private var showingChapterPicker = false
+    @State private var showTranslationMenu = false
     @State private var targetVerse: Int? = nil
     @State private var scrollTrigger: Bool = false
     @State private var selectedVerseId: Int? = nil
@@ -81,6 +82,8 @@ enum ReadingMode: String, CaseIterable {
     @State private var showNavigationArrows = true
     @State private var isAtBottom = false
     @State private var animatedVerses: Set<Int> = [] // Track which verses have been animated
+    @State private var horizontalDragOffset: CGFloat = 0
+    @State private var isHorizontalDragging = false
     
     // Font size constants
     private let minFontSize: CGFloat = 12
@@ -89,6 +92,58 @@ enum ReadingMode: String, CaseIterable {
     
     
     // MARK: - Helper Functions
+    
+    // Helper to check if we can navigate to previous chapter
+    private var canGoPrevious: Bool {
+        if bibleManager.currentChapter > 1 {
+            return true
+        }
+        // Check if there's a previous book
+        return bibleManager.currentBook > 1
+    }
+    
+    // Helper to check if we can navigate to next chapter
+    private var canGoNext: Bool {
+        let maxChapter = bibleManager.getAvailableChapters(for: bibleManager.currentBook).last ?? 0
+        if bibleManager.currentChapter < maxChapter {
+            return true
+        }
+        // Check if there's a next book
+        let maxBook = bibleManager.getAvailableBooks().last?.id ?? 0
+        return bibleManager.currentBook < maxBook
+    }
+    
+    private func goToPreviousChapter() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        if bibleManager.currentChapter > 1 {
+            // Go to previous chapter in same book
+            bibleManager.loadVerses(book: bibleManager.currentBook, chapter: bibleManager.currentChapter - 1)
+        } else if bibleManager.currentBook > 1 {
+            // Go to last chapter of previous book
+            let previousBook = bibleManager.currentBook - 1
+            let lastChapter = bibleManager.getAvailableChapters(for: previousBook).last ?? 1
+            bibleManager.loadVerses(book: previousBook, chapter: lastChapter)
+        }
+    }
+    
+    private func goToNextChapter() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        let maxChapter = bibleManager.getAvailableChapters(for: bibleManager.currentBook).last ?? 0
+        if bibleManager.currentChapter < maxChapter {
+            // Go to next chapter in same book
+            bibleManager.loadVerses(book: bibleManager.currentBook, chapter: bibleManager.currentChapter + 1)
+        } else {
+            // Go to first chapter of next book
+            let maxBook = bibleManager.getAvailableBooks().last?.id ?? 0
+            if bibleManager.currentBook < maxBook {
+                bibleManager.loadVerses(book: bibleManager.currentBook + 1, chapter: 1)
+            }
+        }
+    }
     
     /// Normalizes and cleans verse text for display.
     /// - Parameter text: Raw verse text from the local scripture database.
@@ -158,7 +213,8 @@ enum ReadingMode: String, CaseIterable {
                         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                         impactFeedback.impactOccurred()
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            showSettingsMenu.toggle()
+                            showTranslationMenu.toggle()
+                            showSettingsMenu = false // Close settings menu when opening translation menu
                         }
                     }) {
                         Text(bibleManager.currentTranslation.abbreviation)
@@ -187,6 +243,7 @@ enum ReadingMode: String, CaseIterable {
                         impactFeedback.impactOccurred()
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             showSettingsMenu.toggle()
+                            showTranslationMenu = false // Close translation menu when opening settings menu
                         }
                     }) {
                         Image(systemName: showSettingsMenu ? "xmark" : "textformat.size")
@@ -212,12 +269,32 @@ enum ReadingMode: String, CaseIterable {
                 .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 
+                // Translation dropdown menu
+                if showTranslationMenu {
+                    TranslationMenu(
+                        bibleManager: bibleManager,
+                        readingMode: readingMode,
+                        onDismiss: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                showTranslationMenu = false
+                            }
+                        }
+                    )
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.top, StyleGuide.spacing.sm)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .move(edge: .top).combined(with: .opacity)
+                        )
+                    )
+                }
+                
                 // Settings dropdown menu
                 if showSettingsMenu {
                     ReadingSettingsMenu(
                         fontSize: $fontSize,
                         readingMode: $readingMode,
-                        bibleManager: bibleManager,
                         minFontSize: minFontSize,
                         maxFontSize: maxFontSize,
                         fontSizeStep: fontSizeStep,
@@ -409,6 +486,8 @@ enum ReadingMode: String, CaseIterable {
                     }
                 }
                 .padding(.top, StyleGuide.spacing.md)
+                .offset(x: horizontalDragOffset)
+                .animation(isHorizontalDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: horizontalDragOffset)
             }
             .coordinateSpace(name: "bibleScroll")
             .onPreferenceChange(BottomDetectionPreferenceKey.self) { maxY in
@@ -444,9 +523,51 @@ enum ReadingMode: String, CaseIterable {
                                         showNavigationArrows = false
                                     }
                                     showSettingsMenu = false // Close settings menu when scrolling
+                                    showTranslationMenu = false // Close translation menu when scrolling
                                 } else {
                                     // Dragging down = scrolling up
                                     showNavigationArrows = true
+                                }
+                            }
+                        }
+                    }
+            )
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                    .onChanged { value in
+                        let dx = value.translation.width
+                        let dy = abs(value.translation.height)
+                        
+                        // Only treat as horizontal swipe if horizontal movement is dominant
+                        if abs(dx) > dy * 2 && abs(dx) > 20 {
+                            isHorizontalDragging = true
+                            // Provide visual feedback with subtle offset (capped at 40 points)
+                            horizontalDragOffset = max(-40, min(40, dx * 0.3))
+                        }
+                    }
+                    .onEnded { value in
+                        guard isHorizontalDragging else { return }
+                        
+                        let dx = value.translation.width
+                        let dy = abs(value.translation.height)
+                        
+                        // Reset state
+                        isHorizontalDragging = false
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            horizontalDragOffset = 0
+                        }
+                        
+                        // Check if this was a valid horizontal swipe
+                        if abs(dx) > dy * 2 && abs(dx) > 80 {
+                            if dx > 0 {
+                                // Swipe right = previous chapter
+                                if canGoPrevious {
+                                    goToPreviousChapter()
+                                }
+                            } else {
+                                // Swipe left = next chapter
+                                if canGoNext {
+                                    goToNextChapter()
                                 }
                             }
                         }
@@ -677,11 +798,12 @@ enum ReadingMode: String, CaseIterable {
         }
         .onTapGesture {
             // Tapping outside hides menus and deselects the verse
-            if showActionMenu || selectedVerseId != nil || showSettingsMenu {
+            if showActionMenu || selectedVerseId != nil || showSettingsMenu || showTranslationMenu {
                 withAnimation(.easeInOut(duration: 0.2)) { 
                     showActionMenu = false 
                     selectedVerseId = nil
                     showSettingsMenu = false
+                    showTranslationMenu = false
                 }
             }
         }
@@ -970,6 +1092,135 @@ private struct ChapterButton: View {
     
     private var darkShadowRadius: CGFloat {
         isCurrentChapter ? 6 : 3
+    }
+}
+
+// MARK: - Translation Menu
+/// Dropdown menu for selecting Bible translations.
+private struct TranslationMenu: View {
+    @ObservedObject var bibleManager: BibleManager
+    let readingMode: ReadingMode
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Translation")
+                .font(StyleGuide.merriweather(size: 13, weight: .semibold))
+                .foregroundColor(readingMode.textColor.opacity(0.7))
+                .textCase(.uppercase)
+                .tracking(0.5)
+            
+            VStack(spacing: 8) {
+                ForEach(BibleTranslation.translations, id: \.id) { translation in
+                    Button(action: {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            bibleManager.switchTranslation(translation)
+                        }
+                        // Auto-dismiss after selection
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            onDismiss()
+                        }
+                    }) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(translation.abbreviation)
+                                    .font(StyleGuide.merriweather(size: 15, weight: bibleManager.currentTranslation.id == translation.id ? .bold : .semibold))
+                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor : readingMode.textColor.opacity(0.6))
+                                
+                                Text(translation.name)
+                                    .font(StyleGuide.merriweather(size: 11, weight: .regular))
+                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.7) : readingMode.textColor.opacity(0.4))
+                                    .lineLimit(1)
+                            }
+                            
+                            Spacer()
+                            
+                            if bibleManager.currentTranslation.id == translation.id {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(readingMode.textColor)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(bibleManager.currentTranslation.id == translation.id ? readingMode.cardBackground : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(
+                                    bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.2) : readingMode.textColor.opacity(0.08),
+                                    lineWidth: bibleManager.currentTranslation.id == translation.id ? 1.2 : 0.8
+                                )
+                        )
+                        .shadow(color: bibleManager.currentTranslation.id == translation.id ? readingMode.shadowDark.opacity(0.1) : Color.clear, radius: 3, x: 0, y: 2)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+        }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 18)
+        .background(
+            ZStack {
+                // Glassmorphic background with blur
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                
+                // Subtle gradient overlay for depth (more transparent)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.2),
+                                Color.white.opacity(0.1),
+                                Color.white.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                // Light refraction effect at the top
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.2),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+            }
+        )
+        .overlay(
+            // Glass border with subtle shimmer
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.8),
+                            Color.white.opacity(0.3),
+                            readingMode.textColor.opacity(0.1),
+                            Color.white.opacity(0.3)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        // Soft outer glow for floating glass effect
+        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+        // Subtle highlight on top edge
+        .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
     }
 }
 
@@ -1285,7 +1536,6 @@ private struct BottomDetectionPreferenceKey: PreferenceKey {
 private struct ReadingSettingsMenu: View {
     @Binding var fontSize: CGFloat
     @Binding var readingMode: ReadingMode
-    @ObservedObject var bibleManager: BibleManager
     let minFontSize: CGFloat
     let maxFontSize: CGFloat
     let fontSizeStep: CGFloat
@@ -1293,70 +1543,6 @@ private struct ReadingSettingsMenu: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Translation Section
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Translation")
-                    .font(StyleGuide.merriweather(size: 13, weight: .semibold))
-                    .foregroundColor(readingMode.textColor.opacity(0.7))
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-                
-                HStack(spacing: 8) {
-                    ForEach(BibleTranslation.translations, id: \.id) { translation in
-                        Button(action: {
-                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                            impactFeedback.impactOccurred()
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                bibleManager.switchTranslation(translation)
-                            }
-                        }) {
-                            VStack(spacing: 4) {
-                                Text(translation.abbreviation)
-                                    .font(StyleGuide.merriweather(size: 15, weight: bibleManager.currentTranslation.id == translation.id ? .bold : .semibold))
-                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor : readingMode.textColor.opacity(0.5))
-                                
-                                Text(translation.name)
-                                    .font(StyleGuide.merriweather(size: 10, weight: .regular))
-                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.8) : readingMode.textColor.opacity(0.4))
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(bibleManager.currentTranslation.id == translation.id ? readingMode.cardBackground : Color.clear)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(
-                                        bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.3) : readingMode.textColor.opacity(0.1),
-                                        lineWidth: bibleManager.currentTranslation.id == translation.id ? 1.5 : 0.8
-                                    )
-                            )
-                            .shadow(color: bibleManager.currentTranslation.id == translation.id ? readingMode.shadowDark.opacity(0.15) : Color.clear, radius: 3, x: 0, y: 2)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-            }
-            
-            // Divider
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            readingMode.shadowLight.opacity(0.3),
-                            readingMode.textColor.opacity(0.08),
-                            readingMode.shadowLight.opacity(0.3)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 0.5)
-            
             // Reading Mode Section
             VStack(alignment: .leading, spacing: 10) {
                 Text("Reading Mode")
