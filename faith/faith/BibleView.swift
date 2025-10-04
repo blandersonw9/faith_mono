@@ -127,43 +127,47 @@ enum ReadingMode: String, CaseIterable {
                 // Header with book/chapter selectors
                 if showNavigationArrows {
                 HStack(spacing: 8) {
-                    // Book and Chapter selector combined
-                    HStack(spacing: 4) {
-                        // Book name button
-                        Button(action: {
-                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                            impactFeedback.impactOccurred()
-                            showingBookPicker = true
-                        }) {
-                            Text(bibleManager.currentBook > 0 ? 
-                                 "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book")" : 
-                                 "Select Book")
-                                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                                .foregroundColor(readingMode.textColor)
-                                .padding(.horizontal, StyleGuide.spacing.md)
-                                .padding(.vertical, StyleGuide.spacing.sm)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        // Divider
-                        Rectangle()
-                            .fill(readingMode.textColor.opacity(0.15))
-                            .frame(width: 1, height: 24)
-                        
-                        // Chapter number button
-                        Button(action: {
-                            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                            impactFeedback.impactOccurred()
-                            showingChapterPicker = true
-                        }) {
-                            Text("\(bibleManager.currentChapter)")
-                                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                                .foregroundColor(readingMode.textColor)
-                                .padding(.horizontal, StyleGuide.spacing.md)
-                                .padding(.vertical, StyleGuide.spacing.sm)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                    // Combined Book and Chapter button
+                    Button(action: {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                        showingBookPicker = true
+                    }) {
+                        Text(bibleManager.currentBook > 0 ? 
+                             "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book") \(bibleManager.currentChapter)" : 
+                             "Select Book")
+                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                            .foregroundColor(readingMode.textColor)
+                            .padding(.horizontal, StyleGuide.spacing.md)
+                            .padding(.vertical, StyleGuide.spacing.sm)
                     }
+                    .buttonStyle(PlainButtonStyle())
+                    .background(
+                        RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
+                            .fill(readingMode.cardBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
+                            .stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8)
+                    )
+                    .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
+                    .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
+                    
+                    // Translation button
+                    Button(action: {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            showSettingsMenu.toggle()
+                        }
+                    }) {
+                        Text(bibleManager.currentTranslation.abbreviation)
+                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                            .foregroundColor(readingMode.textColor)
+                            .padding(.horizontal, StyleGuide.spacing.md)
+                            .padding(.vertical, StyleGuide.spacing.sm)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                     .background(
                         RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
                             .fill(readingMode.cardBackground)
@@ -340,7 +344,7 @@ enum ReadingMode: String, CaseIterable {
                                         .frame(width: max(24, fontSize * 1.5), alignment: .trailing)
                                     
                                     Text(LocalizedStringKey(cleanBibleText(verse.text)))
-                                        .font(StyleGuide.merriweather(size: fontSize, weight: isSelected ? .medium : .regular))
+                                        .font(StyleGuide.merriweather(size: fontSize, weight: .regular))
                                         .foregroundColor(isSelected ? readingMode.textColor.opacity(0.95) : readingMode.textColor)
                                         .lineSpacing(fontSize * 0.375)
                                         .multilineTextAlignment(.leading)

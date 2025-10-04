@@ -253,6 +253,17 @@ struct ChatView: View {
             let convo = await ChatStore.shared.upsertConversation(from: current, existingId: currentConversationId)
             await MainActor.run { currentConversationId = convo.id }
         } catch {
+            #if DEBUG
+            print("❌ Chat API Error: \(error)")
+            print("   Error type: \(type(of: error))")
+            if let chatError = error as? ChatError {
+                print("   Chat error: \(chatError.errorDescription ?? "unknown")")
+            }
+            if let urlError = error as? URLError {
+                print("   URL error code: \(urlError.code)")
+                print("   URL error description: \(urlError.localizedDescription)")
+            }
+            #endif
             await MainActor.run {
                 if let idx = messages.firstIndex(where: { $0.id == assistantId }) {
                     messages[idx] = ChatMessage(id: assistantId, role: .assistant, text: "I apologize, but I'm having trouble responding right now. Please try again later.")
@@ -296,7 +307,18 @@ struct ChatView: View {
     }
     
     private func sendToAPI(message: String, conversation: [ChatMessage]? = nil) async throws -> String {
+        #if DEBUG
+        print("🔐 Getting auth session...")
+        #endif
+        
         let session = try await authManager.supabase.auth.session
+        
+        #if DEBUG
+        print("✅ Auth session obtained")
+        print("   User ID: \(session.user.id)")
+        print("   Access token length: \(session.accessToken.count) chars")
+        #endif
+        
         // Convert messages to OpenAI format
         let openAIMessages: [[String: String]]
         if let conv = conversation {
@@ -342,12 +364,34 @@ struct ChatView: View {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONEncoder().encode(Body(messages: messages))
+        
+        #if DEBUG
+        print("🌐 Calling bright-processor API...")
+        print("   URL: \(url.absoluteString)")
+        print("   Messages count: \(messages.count)")
+        #endif
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { throw ChatError.invalidResponse }
+        
+        #if DEBUG
+        print("📡 Response status code: \(httpResponse.statusCode)")
+        if httpResponse.statusCode != 200 {
+            if let responseBody = String(data: data, encoding: .utf8) {
+                print("   Response body: \(responseBody)")
+            }
+        }
+        #endif
+        
         if httpResponse.statusCode == 429 { throw ChatError.rateLimited }
         guard httpResponse.statusCode == 200 else { throw ChatError.serverError(httpResponse.statusCode) }
         let decoded = try JSONDecoder().decode(BrightResponse.self, from: data)
         guard let content = decoded.choices.first?.message.content else { throw ChatError.invalidResponse }
+        
+        #if DEBUG
+        print("✅ Successfully received response from API")
+        #endif
+        
         return content
     }
 

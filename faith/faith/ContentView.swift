@@ -103,7 +103,7 @@ struct CustomTabView: View {
     @Binding var selectedTab: Int
     @Binding var showingChat: Bool
     var bottomInset: CGFloat = 0
-    private let barHeight: CGFloat = 64
+    private let barHeight: CGFloat = 72
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -174,7 +174,7 @@ struct CustomTabView: View {
                 Spacer()
             }
             .padding(.horizontal, StyleGuide.spacing.lg)
-            .padding(.top, 48)
+            .padding(.top, 42)
         }
         .frame(height: barHeight + max(0, bottomInset))
         .ignoresSafeArea(edges: .bottom)
@@ -209,7 +209,7 @@ struct TabButton: View {
             }
             .foregroundColor(isSelected ? StyleGuide.mainBrown : StyleGuide.mainBrown.opacity(0.5))
             .frame(width: 80, height: 56)
-            .padding(.bottom, 8)
+            .padding(.bottom, 10)
             .scaleEffect(isPressed ? 0.85 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
         }
