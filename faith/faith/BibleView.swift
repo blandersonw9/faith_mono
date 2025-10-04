@@ -421,7 +421,6 @@ enum ReadingMode: String, CaseIterable {
                                     Text("\(verse.verse)")
                                         .font(StyleGuide.merriweather(size: max(10, fontSize * 0.625), weight: .semibold))
                                         .foregroundColor(readingMode.textColor.opacity(0.5))
-                                        .frame(width: max(24, fontSize * 1.5), alignment: .trailing)
                                     
                                     HStack(alignment: .top, spacing: 6) {
                                         Text(LocalizedStringKey(cleanBibleText(verse.text)))
