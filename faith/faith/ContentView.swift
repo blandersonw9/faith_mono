@@ -106,80 +106,89 @@ struct CustomTabView: View {
     private let barHeight: CGFloat = 72
     
     var body: some View {
-        ZStack(alignment: .top) {
-            // Solid background and top divider inside the bar; include device bottom inset
-            StyleGuide.backgroundBeige
-            Rectangle()
-                .fill(StyleGuide.backgroundBeige)
-                .frame(height: max(0, bottomInset))
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            Rectangle()
-                .fill(StyleGuide.mainBrown.opacity(0.1))
-                .frame(height: 1)
-                .frame(maxHeight: .infinity, alignment: .top)
+        HStack(spacing: 20) {
+            Spacer()
             
-            // Tab buttons container
-            HStack(spacing: 0) {
-                Spacer()
-                    .frame(maxWidth: 40)
-                
-                TabButton(
-                    icon: "homeIcon",
-                    title: "Home",
-                    isSelected: selectedTab == 0,
-                    isSystemIcon: false
-                ) {
-                    selectedTab = 0
+            // Center capsule with Home, Bible, and Cross buttons
+            Group {
+                HStack(spacing: 20) {
+                    TabButton(
+                        icon: "homeIcon",
+                        title: "Home",
+                        isSelected: selectedTab == 0,
+                        isSystemIcon: false
+                    ) {
+                        selectedTab = 0
+                    }
+                    
+                    TabButton(
+                        icon: "bibleIcon",
+                        title: "Bible",
+                        isSelected: selectedTab == 1,
+                        isSystemIcon: false
+                    ) {
+                        selectedTab = 1
+                    }
+                    
+                    // Cross button integrated into menu
+                    IntegratedCrossButton {
+                        showingChat = true
+                    }
                 }
-                
-                Spacer()
-                    .frame(maxWidth: 80)
-                
-                // Tab 2: Bible
-                TabButton(
-                    icon: "bibleIcon",
-                    title: "Bible",
-                    isSelected: selectedTab == 1,
-                    isSystemIcon: false
-                ) {
-                    selectedTab = 1
-                }
-                
-                Spacer()
-                
-                // Floating Circle Button
-                FloatingTabButton(
-                    icon: "aiIcon",
-                    isSystemIcon: false
-                ) {
-                    showingChat = true
-                }
-                
-                Spacer()
-                    .frame(maxWidth: 20)
+                .padding(.leading, 14)
+                .padding(.trailing, 14)
+                .padding(.vertical, 10)
             }
-            .padding(.horizontal, StyleGuide.spacing.lg)
+            .modifier(GlassTabBarModifier())
+            .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
             
-            // Animated pill indicator below icons
-            HStack(spacing: 0) {
-                Spacer()
-                    .frame(maxWidth: 40)
-                
-                Capsule()
-                    .fill(StyleGuide.mainBrown)
-                    .frame(width: 40, height: 2.5)
-                    .offset(x: selectedTab == 0 ? 20 : 180)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: selectedTab)
-                
-                Spacer()
-            }
-            .padding(.horizontal, StyleGuide.spacing.lg)
-            .padding(.top, 42)
+            Spacer()
         }
-        .frame(height: barHeight + max(0, bottomInset))
+        .padding(.horizontal, StyleGuide.spacing.lg)
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
         .ignoresSafeArea(edges: .bottom)
-        .shadow(color: StyleGuide.mainBrown.opacity(0.25), radius: 4, x: 0, y: 0)
         
+    }
+}
+
+// MARK: - Glass Effect Modifiers
+struct GlassTabBarModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.tint(StyleGuide.backgroundBeige.opacity(0.5)).interactive())
+                .clipShape(Capsule())
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .fill(StyleGuide.backgroundBeige.opacity(0.1))
+                        .allowsHitTesting(false)
+                )
+        }
+    }
+}
+
+struct GlassButtonModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.tint(StyleGuide.mainBrown.opacity(0.85)).interactive())
+                .clipShape(Circle())
+        } else {
+            content
+                .background {
+                    ZStack {
+                        Circle()
+                            .fill(StyleGuide.mainBrown.opacity(0.85))
+                            .frame(width: 64, height: 64)
+                    }
+                    .background(.thinMaterial, in: Circle())
+                    .allowsHitTesting(false)
+                }
+        }
     }
 }
 
@@ -198,7 +207,7 @@ struct TabButton: View {
             Group {
                 if isSystemIcon {
                     Image(systemName: icon)
-                        .font(.system(size: 22))
+                        .font(.system(size: 28))
                 } else {
                     Image(icon)
                         .renderingMode(.template)
@@ -207,13 +216,12 @@ struct TabButton: View {
                         .frame(width: 32, height: 32)
                 }
             }
-            .foregroundColor(isSelected ? StyleGuide.mainBrown : StyleGuide.mainBrown.opacity(0.5))
-            .frame(width: 80, height: 56)
-            .padding(.bottom, 10)
+            .foregroundColor(isSelected ? StyleGuide.mainBrown : StyleGuide.mainBrown.opacity(0.4))
+            .scaleEffect(isSelected ? 1.0 : 0.9)
             .scaleEffect(isPressed ? 0.85 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isSelected)
         }
-        .frame(width: 80, height: 56)
         .contentShape(Rectangle())
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
@@ -226,7 +234,42 @@ struct TabButton: View {
                     isPressed = false
                 }
         )
-        .animation(.easeInOut(duration: 0.2), value: isSelected)
+    }
+}
+
+// MARK: - Integrated Cross Button
+struct IntegratedCrossButton: View {
+    let action: () -> Void
+    
+    @State private var isPressed = false
+    
+    var body: some View {
+        Button(action: action) {
+            Image("cross")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 20, height: 20)
+                .foregroundColor(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle()
+                        .fill(StyleGuide.mainBrown)
+                )
+                .scaleEffect(isPressed ? 0.9 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
+        }
+        .contentShape(Circle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    if !isPressed {
+                        isPressed = true
+                    }
+                }
+                .onEnded { _ in
+                    isPressed = false
+                }
+        )
     }
 }
 
@@ -240,37 +283,19 @@ struct FloatingTabButton: View {
     
     var body: some View {
         Button(action: action) {
-            Circle()
-                .fill(StyleGuide.mainBrown)
-                .frame(width: 60, height: 60)
-                .overlay(
-                    Image("cross")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 30, height: 30)
-                        .foregroundColor(.white)
-                    // Group {
-                    //     if isSystemIcon {
-                    //         Image(systemName: icon)
-                    //             .font(.system(size: 32, weight: .semibold))
-                    //             .foregroundColor(.white)
-                    //     } else {
-                    //         Image(icon)
-                    //             .renderingMode(.template)
-                    //             .resizable()
-                    //             .aspectRatio(contentMode: .fit)
-                    //             .frame(width: 36, height: 36)
-                    //             .foregroundColor(.white)
-                    //     }
-                    // }
-                )
-                .shadow(color: StyleGuide.shadows.md, radius: 4, x: 0, y: 2)
+            Image("cross")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .foregroundColor(.white)
+                .frame(width: 64, height: 64)
+                .modifier(GlassButtonModifier())
+                .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 4)
                 .scaleEffect(isPressed ? 0.9 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isPressed)
         }
-        .frame(width: 60, height: 60)
+        .frame(width: 64, height: 64)
         .contentShape(Circle())
-        .offset(y: -30) // Center of circle aligned with top of tab bar
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
