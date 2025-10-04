@@ -572,9 +572,7 @@ private struct MessageRow: View, Equatable {
     let typingAssistantId: UUID?
 
     static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
-        let lhsLinkingEnabled = !(lhs.isLoading && lhs.typingAssistantId == lhs.message.id)
-        let rhsLinkingEnabled = !(rhs.isLoading && rhs.typingAssistantId == rhs.message.id)
-        return lhs.message.id == rhs.message.id && lhs.message.text == rhs.message.text && lhsLinkingEnabled == rhsLinkingEnabled
+        return lhs.message.id == rhs.message.id && lhs.message.text == rhs.message.text
     }
 
     var body: some View {
@@ -590,7 +588,7 @@ private struct MessageRow: View, Equatable {
                     } else {
                         BasicMarkdownText(
                             text: message.text,
-                            enableLinking: !(isLoading && typingAssistantId == message.id)
+                            enableLinking: true
                         )
                     }
                 }
@@ -811,11 +809,10 @@ struct BasicMarkdownText: View {
             }
         }
         let linked = AttributedString(ns)
+        // Use UIKit-backed text view to ensure links are tappable
         return AnyView(
-            Text(linked)
-                .multilineTextAlignment(.leading)
-                .lineSpacing(8)
-                .fixedSize(horizontal: false, vertical: true)
+            LinkingText(attributed: linked, onOpen: { url in openURL(url) })
+                .frame(maxWidth: .infinity, alignment: .leading)
         )
     }
 
@@ -886,28 +883,23 @@ struct BasicMarkdownText: View {
 // MARK: - UIKit-backed text view for reliable tappable links
 private struct LinkingText: UIViewRepresentable {
     let attributed: AttributedString
-    let width: CGFloat
     let onOpen: (URL) -> Void
 
-    func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
+    func makeUIView(context: Context) -> LinkableTextView {
+        let tv = LinkableTextView()
         tv.isEditable = false
         tv.isSelectable = true
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
         tv.textContainerInset = .zero
         tv.textContainer.lineFragmentPadding = 0
-        tv.textContainer.widthTracksTextView = true
         tv.textAlignment = .left
         tv.font = UIFont(name: "Merriweather", size: 16)
         tv.textColor = UIColor(StyleGuide.mainBrown)
         tv.delegate = context.coordinator
         tv.textContainer.lineBreakMode = .byWordWrapping
-        tv.setContentCompressionResistancePriority(.required, for: .vertical)
-        tv.setContentHuggingPriority(.required, for: .vertical)
-        // Keep the view's assigned width; do not expand to fit long links
-        tv.setContentHuggingPriority(.required, for: .horizontal)
         tv.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tv.setContentHuggingPriority(.defaultHigh, for: .vertical)
         tv.linkTextAttributes = [
             .foregroundColor: UIColor(StyleGuide.gold),
             .underlineStyle: NSUnderlineStyle.single.rawValue
@@ -915,7 +907,7 @@ private struct LinkingText: UIViewRepresentable {
         return tv
     }
 
-    func updateUIView(_ uiView: UITextView, context: Context) {
+    func updateUIView(_ uiView: LinkableTextView, context: Context) {
         let base = NSAttributedString(attributed)
         let m = NSMutableAttributedString(attributedString: base)
         // Apply paragraph style for consistent spacing and alignment
@@ -924,20 +916,16 @@ private struct LinkingText: UIViewRepresentable {
         ps.alignment = .left
         ps.lineBreakMode = .byWordWrapping
         if #available(iOS 14.0, *) {
-            ps.lineBreakStrategy = [.pushOut]
+            ps.lineBreakStrategy = []
         }
         m.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: m.length))
-        // Ensure body font applied across attributed content (non-link runs)
         m.addAttribute(.font, value: UIFont(name: "Merriweather", size: 16) as Any, range: NSRange(location: 0, length: m.length))
         m.addAttribute(.foregroundColor, value: UIColor(StyleGuide.mainBrown), range: NSRange(location: 0, length: m.length))
+        
         uiView.attributedText = m
-        // Ensure wrapping uses the provided width and tracks view size.
-        // Subtract a tiny epsilon to avoid rounding expanding the layout.
-        uiView.textContainer.size = CGSize(width: max(0, width - 1), height: .greatestFiniteMagnitude)
         uiView.textAlignment = .left
         uiView.tintColor = UIColor(StyleGuide.gold)
-        uiView.setNeedsLayout()
-        uiView.layoutIfNeeded()
+        uiView.invalidateIntrinsicContentSize()
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(onOpen: onOpen) }
@@ -950,11 +938,20 @@ private struct LinkingText: UIViewRepresentable {
             return false
         }
     }
-    // Ensure SwiftUI gets an accurate intrinsic size for wrapping
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize {
-        let targetWidth = max(0, width - 1)
-        let size = uiView.sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
-        return CGSize(width: targetWidth, height: size.height)
+}
+
+// Custom UITextView subclass that properly reports intrinsic size
+private class LinkableTextView: UITextView {
+    override var intrinsicContentSize: CGSize {
+        // Calculate size based on current bounds width
+        let width = bounds.width > 0 ? bounds.width : 300
+        let size = sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: UIView.noIntrinsicMetric, height: ceil(size.height))
+    }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        invalidateIntrinsicContentSize()
     }
 }
 
