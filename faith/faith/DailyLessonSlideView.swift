@@ -18,6 +18,22 @@ struct DailyLessonSlideView: View {
     @State private var hideChromeForShare: Bool = false
     @State private var shareImage: UIImage? = nil
     @State private var contentFrame: CGRect = .zero
+    @State private var imageLoaded: Bool = false
+    @State private var preloadedImages: [Int: UIImage] = [:] // Cache of preloaded images by slide index
+    
+    // Get background image URL for current slide (deterministic based on slide index)
+    private var currentBackgroundImageURL: String? {
+        guard !dailyLessonManager.backgroundImageURLs.isEmpty else {
+            return nil
+        }
+        let index = currentSlideIndex % dailyLessonManager.backgroundImageURLs.count
+        return dailyLessonManager.backgroundImageURLs[index]
+    }
+    
+    // Get preloaded image for current slide
+    private var currentPreloadedImage: UIImage? {
+        return preloadedImages[currentSlideIndex]
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -31,63 +47,85 @@ struct DailyLessonSlideView: View {
                 
                 VStack(spacing: 0) {
                    
-
-                    // Subtitle under bar at top-left
-                    if let lesson = dailyLessonManager.currentLesson,
-                       currentSlideIndex < lesson.slides.count {
-                        let slide = lesson.slides[currentSlideIndex]
-                        if let subtitle = slide.subtitle, !subtitle.isEmpty {
-                            HStack {
-                                Text(subtitle)
-                                    .font(StyleGuide.merriweather(size: 18, weight: .semibold))
-                                    .foregroundColor(StyleGuide.mainBrown)
-                                Spacer()
+                    // Only show content when image is loaded
+                    if imageLoaded {
+                        // Subtitle under bar at top-left
+                        if let lesson = dailyLessonManager.currentLesson,
+                           currentSlideIndex < lesson.slides.count {
+                            let slide = lesson.slides[currentSlideIndex]
+                            if let subtitle = slide.subtitle, !subtitle.isEmpty {
+                                HStack {
+                                    Text(subtitle)
+                                        .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 12)
+                                .background(
+                                    Color.black.opacity(0.35)
+                                        .blur(radius: 20)
+                                )
+                                .padding(.top, 24)
+                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
                             }
-                            .padding(.horizontal, 24)
-                            .padding(.top, 24)
                         }
-                    }
-                    
-                    // Main content area - direct layout on screen
-                    if let lesson = dailyLessonManager.currentLesson,
-                       currentSlideIndex < lesson.slides.count {
-                        let slide = lesson.slides[currentSlideIndex]
+                        
+                        // Main content area - direct layout on screen
+                        if let lesson = dailyLessonManager.currentLesson,
+                           currentSlideIndex < lesson.slides.count {
+                            let slide = lesson.slides[currentSlideIndex]
                         
                         ZStack {
                             // Content laid directly on screen
                             VStack(spacing: 0) {
                                 Spacer(minLength: 12)
                                 
-                                // Main content styled like chat markdown renderer
-                                BasicMarkdownText(text: slide.mainText, enableLinking: false)
-                                    .padding(.horizontal, 16)
-                                
-                                // Verse reference
-                                if let verseReference = slide.verseReference {
-                                    VStack(spacing: 16) {
-                                        Rectangle()
-                                            .fill(StyleGuide.mainBrown.opacity(0.2))
-                                            .frame(height: 1)
-                                            .padding(.horizontal, 24)
-                                            .padding(.top, 30)
-                                        
-                                        Text("— \(verseReference)")
-                                            .font(StyleGuide.merriweather(size: 16, weight: .regular))
-                                            .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
-                                            .multilineTextAlignment(.leading)
-                                            .padding(.horizontal, 24)
+                                // Main content with readable background
+                                VStack(spacing: 20) {
+                                    // Main text
+                                    BasicMarkdownText(text: slide.mainText, enableLinking: false, textColor: .white)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 20)
+                                    
+                                    // Verse reference
+                                    if let verseReference = slide.verseReference {
+                                        VStack(spacing: 12) {
+                                            Rectangle()
+                                                .fill(Color.white.opacity(0.4))
+                                                .frame(height: 1)
+                                                .padding(.horizontal, 24)
+                                            
+                                            Text("— \(verseReference)")
+                                                .font(StyleGuide.merriweather(size: 16, weight: .regular))
+                                                .foregroundColor(.white)
+                                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 1)
+                                                .multilineTextAlignment(.center)
+                                                .padding(.horizontal, 24)
+                                                .padding(.bottom, 16)
+                                        }
                                     }
                                 }
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color.black.opacity(0.4))
+                                        .blur(radius: 30)
+                                )
+                                .padding(.horizontal, 20)
                                 
                                 Spacer()
                             }
+                        }
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         }
                     }
                     
                     Spacer()
                     
                     // Bottom navigation - symmetric circular buttons with share in the middle
-                    HStack {
+                    if imageLoaded {
+                        HStack {
                         Button(action: { goToPreviousSlide() }) {
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 18, weight: .semibold))
@@ -132,6 +170,8 @@ struct DailyLessonSlideView: View {
                     .contentShape(Rectangle())
                     .opacity(hideChromeForShare ? 0 : 1)
                     .allowsHitTesting(!hideChromeForShare)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
                 }
                 // Tap left/right to navigate like stories
                 .overlay(
@@ -158,8 +198,51 @@ struct DailyLessonSlideView: View {
                             else if value.translation.width < -60 { goToNextSlide() }
                         }
                 )
-                // Round only the top corners of the main content
-                .background(StyleGuide.backgroundBeige)
+                // Round only the top corners of the main content with background image
+                .background(
+                    ZStack {
+                        // Background image - use preloaded image if available, otherwise AsyncImage
+                        Group {
+                            if let cachedImage = currentPreloadedImage {
+                                // Use cached image for instant loading
+                                Image(uiImage: cachedImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } else if let imageURL = currentBackgroundImageURL, let url = URL(string: imageURL) {
+                                // Fallback to AsyncImage if not yet cached
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        StyleGuide.backgroundBeige
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                    case .failure:
+                                        StyleGuide.backgroundBeige
+                                    @unknown default:
+                                        StyleGuide.backgroundBeige
+                                    }
+                                }
+                            } else {
+                                // Fallback if no URL available
+                                StyleGuide.backgroundBeige
+                            }
+                        }
+                        
+                        // Light overlay for depth
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.black.opacity(0.15),
+                                Color.clear,
+                                Color.black.opacity(0.1)
+                            ]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                    .ignoresSafeArea()
+                )
                 .clipShape(TopRoundedCorner(radius: 20))
                 // Track the on-screen frame of the main content for cropping the share image
                 .background(
@@ -199,6 +282,87 @@ struct DailyLessonSlideView: View {
         }
         .onAppear {
             currentSlideIndex = dailyLessonManager.currentProgress?.currentSlideIndex ?? 0
+            imageLoaded = false
+            
+            print("🎬 Daily lesson appeared. Background URLs count: \(dailyLessonManager.backgroundImageURLs.count)")
+            
+            // Preload all images for this lesson
+            preloadLessonImages()
+            
+            // Fallback: show content after 1 second even if image hasn't loaded
+            Task {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                await MainActor.run {
+                    if !imageLoaded {
+                        print("⚠️ Image load timeout - showing content anyway")
+                        withAnimation {
+                            imageLoaded = true
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: currentSlideIndex) { _ in
+            // Keep content visible during slide transitions
+            // Don't reset imageLoaded - this prevents black flashes
+            print("📱 Slide changed to index: \(currentSlideIndex)")
+        }
+    }
+    
+    // MARK: - Image Preloading
+    
+    private func preloadLessonImages() {
+        guard let lesson = dailyLessonManager.currentLesson,
+              !dailyLessonManager.backgroundImageURLs.isEmpty else {
+            print("⚠️ No lesson or background URLs to preload")
+            imageLoaded = true
+            return
+        }
+        
+        let totalSlides = lesson.slides.count
+        print("🖼️ Preloading images for \(totalSlides) slides...")
+        
+        Task {
+            var loadedCount = 0
+            
+            // Preload images for each slide
+            for slideIndex in 0..<totalSlides {
+                let imageIndex = slideIndex % dailyLessonManager.backgroundImageURLs.count
+                let urlString = dailyLessonManager.backgroundImageURLs[imageIndex]
+                
+                // Skip if already loaded
+                if preloadedImages[slideIndex] != nil {
+                    continue
+                }
+                
+                // Download image
+                if let url = URL(string: urlString),
+                   let (data, _) = try? await URLSession.shared.data(from: url),
+                   let uiImage = UIImage(data: data) {
+                    await MainActor.run {
+                        preloadedImages[slideIndex] = uiImage
+                        loadedCount += 1
+                        
+                        // Show content once first image is loaded
+                        if slideIndex == currentSlideIndex && !imageLoaded {
+                            withAnimation {
+                                imageLoaded = true
+                            }
+                        }
+                        
+                        print("✅ Preloaded image \(loadedCount)/\(totalSlides)")
+                    }
+                } else {
+                    print("❌ Failed to preload image for slide \(slideIndex)")
+                }
+            }
+            
+            await MainActor.run {
+                print("🎉 Preloading complete! Loaded \(loadedCount)/\(totalSlides) images")
+                if !imageLoaded {
+                    imageLoaded = true
+                }
+            }
         }
     }
     
@@ -284,9 +448,12 @@ struct DailyLessonSlideView: View {
         let screenSize = UIScreen.main.bounds.size
         let targetWidth = screenSize.width
         let targetHeight = screenSize.height
-        let shareView = ShareLessonContentView(slide: slide)
+        let shareView = ShareLessonContentView(
+            slide: slide, 
+            backgroundImage: currentPreloadedImage,
+            backgroundImageURL: currentBackgroundImageURL
+        )
             .frame(width: targetWidth, height: targetHeight)
-            .background(StyleGuide.backgroundBeige)
 
         if #available(iOS 16.0, *) {
             let renderer = ImageRenderer(content: shareView)
@@ -329,23 +496,67 @@ fileprivate struct ContentFramePreferenceKey: PreferenceKey {
 // MARK: - Offscreen share view (no header, no rounded corners)
 fileprivate struct ShareLessonContentView: View {
     let slide: LessonSlide
+    let backgroundImage: UIImage?
+    let backgroundImageURL: String?
     
     var body: some View {
         ZStack {
-            // Background - full screen beige
-            StyleGuide.backgroundBeige
-                .ignoresSafeArea(.all)
+            // Background - full screen image with overlay
+            ZStack {
+                Group {
+                    if let cachedImage = backgroundImage {
+                        // Use preloaded image
+                        Image(uiImage: cachedImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else if let imageURL = backgroundImageURL, let url = URL(string: imageURL) {
+                        // Fallback to AsyncImage
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            default:
+                                StyleGuide.backgroundBeige
+                            }
+                        }
+                    } else {
+                        StyleGuide.backgroundBeige
+                    }
+                }
+                
+                // Light overlay for depth
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.black.opacity(0.15),
+                        Color.clear,
+                        Color.black.opacity(0.1)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .ignoresSafeArea(.all)
             
             VStack(spacing: 0) {
                 // Subtitle under bar at top-left (exact copy from main view)
-                HStack {
-                    Text(slide.subtitle ?? "")
-                        .font(StyleGuide.merriweather(size: 18, weight: .semibold))
-                        .foregroundColor(StyleGuide.mainBrown)
-                    Spacer()
+                if let subtitle = slide.subtitle, !subtitle.isEmpty {
+                    HStack {
+                        Text(subtitle)
+                            .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(
+                        Color.black.opacity(0.35)
+                            .blur(radius: 20)
+                    )
+                    .padding(.top, 24)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
                 
                 // Main content area - direct layout on screen (exact copy)
                 ZStack {
@@ -353,26 +564,37 @@ fileprivate struct ShareLessonContentView: View {
                     VStack(spacing: 0) {
                         Spacer(minLength: 12)
                         
-                        // Main content styled like chat markdown renderer
-                        BasicMarkdownText(text: slide.mainText, enableLinking: false)
-                            .padding(.horizontal, 16)
-                        
-                        // Verse reference
-                        if let verseReference = slide.verseReference {
-                            VStack(spacing: 16) {
-                                Rectangle()
-                                    .fill(StyleGuide.mainBrown.opacity(0.2))
-                                    .frame(height: 1)
-                                    .padding(.horizontal, 24)
-                                    .padding(.top, 30)
-                                
-                                Text("— \(verseReference)")
-                                    .font(StyleGuide.merriweather(size: 16, weight: .regular))
-                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
-                                    .multilineTextAlignment(.leading)
-                                    .padding(.horizontal, 24)
+                        // Main content with readable background
+                        VStack(spacing: 20) {
+                            // Main text
+                            BasicMarkdownText(text: slide.mainText, enableLinking: false, textColor: .white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 20)
+                            
+                            // Verse reference
+                            if let verseReference = slide.verseReference {
+                                VStack(spacing: 12) {
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.4))
+                                        .frame(height: 1)
+                                        .padding(.horizontal, 24)
+                                    
+                                    Text("— \(verseReference)")
+                                        .font(StyleGuide.merriweather(size: 16, weight: .regular))
+                                        .foregroundColor(.white)
+                                        .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 1)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 24)
+                                        .padding(.bottom, 16)
+                                }
                             }
                         }
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.black.opacity(0.4))
+                                .blur(radius: 30)
+                        )
+                        .padding(.horizontal, 20)
                         
                         Spacer()
                     }

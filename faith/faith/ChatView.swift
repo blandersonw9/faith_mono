@@ -731,6 +731,7 @@ struct UserBubble: View {
 struct BasicMarkdownText: View {
     let text: String
     var enableLinking: Bool = true
+    var textColor: Color = StyleGuide.mainBrown
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @Environment(\.openURL) private var openURL
 
@@ -787,7 +788,7 @@ struct BasicMarkdownText: View {
             } else {
                 a.font = StyleGuide.merriweather(size: 16)
             }
-            a.foregroundColor = StyleGuide.mainBrown
+            a.foregroundColor = textColor
             attributed.append(a)
         }
 
@@ -831,7 +832,7 @@ struct BasicMarkdownText: View {
             } else {
                 a.font = StyleGuide.merriweather(size: 16)
             }
-            a.foregroundColor = StyleGuide.mainBrown
+            a.foregroundColor = textColor
             attributed.append(a)
         }
         // Normalize non-breaking spaces for consistent wrapping

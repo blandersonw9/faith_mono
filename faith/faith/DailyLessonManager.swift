@@ -17,12 +17,84 @@ class DailyLessonManager: ObservableObject {
     @Published var state: DailyLessonState = .loading
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var backgroundImageURLs: [String] = []
     
     private let supabase: SupabaseClient
     private var cancellables = Set<AnyCancellable>()
     
     init(supabase: SupabaseClient) {
         self.supabase = supabase
+        Task {
+            await fetchBackgroundImages()
+        }
+    }
+    
+    // MARK: - Fetch Background Images
+    
+    @MainActor
+    func fetchBackgroundImages() async {
+        do {
+            // Try to fetch background images from Supabase
+            let backgrounds = try await fetchBackgroundsFromSupabase()
+            self.backgroundImageURLs = backgrounds
+            print("✅ Loaded \(backgrounds.count) background images from Supabase")
+            if !backgrounds.isEmpty {
+                print("📸 First background URL: \(backgrounds[0])")
+            }
+        } catch {
+            print("❌ Failed to fetch background images: \(error)")
+            // Use empty array, will fall back to default background
+            self.backgroundImageURLs = []
+        }
+    }
+    
+    private func fetchBackgroundsFromSupabase() async throws -> [String] {
+        struct BackgroundImage: Codable {
+            let publicUrl: String
+            
+            enum CodingKeys: String, CodingKey {
+                case publicUrl = "public_url"
+            }
+        }
+        
+        // Try to get backgrounds from the function if table exists
+        do {
+            let response: [BackgroundImage] = try await supabase
+                .rpc("get_lesson_backgrounds")
+                .execute()
+                .value
+            
+            // Construct full URLs if they're relative paths
+            let baseURL = Config.supabaseURL
+            return response.map { bgImage in
+                let path = bgImage.publicUrl
+                // If path doesn't start with http, it's relative - add base URL
+                if path.hasPrefix("http") {
+                    return path
+                } else {
+                    // Remove leading slash if present
+                    let cleanPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+                    return "\(baseURL)/storage/v1/object/public/lesson-backgrounds/\(cleanPath)"
+                }
+            }
+        } catch {
+            // If function doesn't exist, try direct storage listing
+            print("⚠️ get_lesson_backgrounds function not found, trying direct storage access")
+            return try await fetchBackgroundsFromStorage()
+        }
+    }
+    
+    private func fetchBackgroundsFromStorage() async throws -> [String] {
+        // List files in the lesson-backgrounds bucket
+        let files = try await supabase.storage
+            .from("lesson-backgrounds")
+            .list()
+        
+        // Build public URLs for each image
+        let baseURL = Config.supabaseURL
+        return files.map { file in
+            "\(baseURL)/storage/v1/object/public/lesson-backgrounds/\(file.name)"
+        }.sorted() // Sort for consistent ordering
     }
     
     // MARK: - Fetch Today's Lesson
@@ -228,12 +300,22 @@ class DailyLessonManager: ObservableObject {
                     p_is_completed: isCompleted
                 )
                 
-                let response: [String: String] = try await supabase
+                // Define response structure to match what Supabase returns
+                struct ProgressResponse: Codable {
+                    let success: Bool
+                    let message: String?
+                }
+                
+                let response: ProgressResponse = try await supabase
                     .rpc("update_lesson_progress", params: params)
                     .execute()
                     .value
                 
-                print("✅ Progress updated successfully")
+                if response.success {
+                    print("✅ Progress updated successfully")
+                } else {
+                    print("⚠️ Progress update returned success=false")
+                }
                 
             } catch {
                 print("❌ Failed to update progress on server: \(error)")
