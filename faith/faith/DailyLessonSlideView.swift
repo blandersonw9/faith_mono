@@ -236,6 +236,10 @@ struct DailyLessonSlideView: View {
                     to: currentSlideIndex,
                     isCompleted: true
                 )
+                // Dismiss the view after marking as completed
+                await MainActor.run {
+                    dismiss()
+                }
             }
         }
     }

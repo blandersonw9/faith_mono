@@ -210,7 +210,10 @@ struct AnyCodable: Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         
-        if let string = try? container.decode(String.self) {
+        // Handle null values
+        if container.decodeNil() {
+            value = Optional<String>.none as Any
+        } else if let string = try? container.decode(String.self) {
             value = string
         } else if let int = try? container.decode(Int.self) {
             value = int

@@ -76,16 +76,45 @@ struct TodayContent: View {
     @ObservedObject var dailyLessonManager: DailyLessonManager
     @State private var showLesson: Bool = false
     
+    // Get today's date formatted
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d"
+        let dateString = formatter.string(from: Date())
+        
+        // Add ordinal suffix (st, nd, rd, th)
+        let day = Calendar.current.component(.day, from: Date())
+        let suffix: String
+        switch day {
+        case 1, 21, 31: suffix = "st"
+        case 2, 22: suffix = "nd"
+        case 3, 23: suffix = "rd"
+        default: suffix = "th"
+        }
+        
+        return dateString + suffix
+    }
+    
+    // Get the first scripture slide's verse text
+    private var scriptureText: String {
+        guard let lesson = dailyLessonManager.currentLesson,
+              let scriptureSlide = lesson.slides.first(where: { $0.slideType == .scripture }),
+              let verseText = scriptureSlide.verseText else {
+            return "Father forgive them, for they do not\nknow what they are doing"
+        }
+        return verseText
+    }
+    
     var body: some View {
         VStack(spacing: 28) {
-            // TOP: Daily practice date
-            Text("Daily practice | September 24th")
+            // TOP: Daily practice date (dynamic)
+            Text("Daily practice | \(formattedDate)")
                 .font(StyleGuide.merriweather(size: 12, weight: .regular))
                 .foregroundColor(StyleGuide.backgroundBeige.opacity(0.5))
                 .frame(maxWidth: .infinity, alignment: .center)
             
-            // CENTER: Bible verse
-            Text("Father forgive them, for they do not\nknow what they are doing")
+            // CENTER: Bible verse (from today's lesson)
+            Text(scriptureText)
                 .font(StyleGuide.merriweather(size: 16, weight: .regular))
                 .foregroundColor(StyleGuide.backgroundBeige)
                 .multilineTextAlignment(.center)

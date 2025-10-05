@@ -61,18 +61,35 @@ class DailyLessonManager: ObservableObject {
     private func fetchLessonFromSupabase() async throws -> DailyLesson {
         print("🔍 Fetching today's lesson from Supabase")
         
-        // Call the get_todays_lesson function
-        let response: [DailyLessonResponse] = try await supabase
-            .rpc("get_todays_lesson")
-            .execute()
-            .value
-        
-        guard let lessonData = response.first else {
-            throw DailyLessonError.noLessonFound
+        do {
+            // Call the get_todays_lesson function
+            let response: [DailyLessonResponse] = try await supabase
+                .rpc("get_todays_lesson")
+                .execute()
+                .value
+            
+            print("📦 Received response with \(response.count) lessons")
+            
+            guard let lessonData = response.first else {
+                print("⚠️ No lesson found in response")
+                throw DailyLessonError.noLessonFound
+            }
+            
+            print("✅ Found lesson: \(lessonData.title) with \(lessonData.slides.count) slides")
+            
+            // Convert the response to our DailyLesson model
+            let lesson = try convertResponseToLesson(lessonData)
+            print("✅ Successfully converted lesson to model")
+            return lesson
+            
+        } catch {
+            print("❌ Detailed error fetching lesson: \(error)")
+            print("❌ Error type: \(type(of: error))")
+            if let decodingError = error as? DecodingError {
+                print("❌ Decoding error details: \(decodingError)")
+            }
+            throw error
         }
-        
-        // Convert the response to our DailyLesson model
-        return try convertResponseToLesson(lessonData)
     }
     
     private func convertResponseToLesson(_ response: DailyLessonResponse) throws -> DailyLesson {
@@ -185,6 +202,12 @@ class DailyLessonManager: ObservableObject {
         
         // Update local progress immediately for responsive UI
         updateLocalProgress(to: slideIndex, isCompleted: isCompleted)
+        
+        // Skip server update if using fallback lesson
+        if isUsingFallback() {
+            print("ℹ️ Using fallback lesson - skipping server progress update")
+            return
+        }
         
         // Update on server in background
         Task {
