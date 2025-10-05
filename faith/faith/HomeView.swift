@@ -109,17 +109,19 @@ struct TodayContent: View {
         VStack(spacing: 28) {
             // TOP: Daily practice date (dynamic)
             Text("Daily practice | \(formattedDate)")
-                .font(StyleGuide.merriweather(size: 12, weight: .regular))
-                .foregroundColor(StyleGuide.backgroundBeige.opacity(0.5))
+                .font(StyleGuide.merriweather(size: 12, weight: .semibold))
+                .foregroundColor(.white.opacity(0.9))
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
                 .frame(maxWidth: .infinity, alignment: .center)
             
             // CENTER: Bible verse (from today's lesson)
             Text(scriptureText)
-                .font(StyleGuide.merriweather(size: 16, weight: .regular))
-                .foregroundColor(StyleGuide.backgroundBeige)
+                .font(StyleGuide.merriweather(size: 17, weight: .semibold))
+                .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .lineSpacing(12)
+                .lineSpacing(6)
+                .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
             
             // BOTTOM: Continue button -> full screen cover story
             Button(action: { showLesson = true }) {
@@ -130,14 +132,39 @@ struct TodayContent: View {
                     .frame(height: 45)
                     .background(StyleGuide.backgroundBeige)
                     .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
             }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 24)
         .background(
-            Image("backgroundCard")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            ZStack {
+                // Background image
+                Group {
+                    if let cachedImage = dailyLessonManager.preloadedFirstImage {
+                        // Use preloaded image for instant display
+                        Image(uiImage: cachedImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } else {
+                        // Fallback to hardcoded image while loading
+                        Image("backgroundCard")
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    }
+                }
+                
+                // Dark overlay for text readability
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.black.opacity(0.35),
+                        Color.black.opacity(0.25),
+                        Color.black.opacity(0.35)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
         )
         .cornerRadius(12)
         .fullScreenCover(isPresented: $showLesson) {

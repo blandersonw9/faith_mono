@@ -18,6 +18,7 @@ class DailyLessonManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var backgroundImageURLs: [String] = []
+    @Published var preloadedFirstImage: UIImage? = nil // Cached first background image for home preview
     
     private let supabase: SupabaseClient
     private var cancellables = Set<AnyCancellable>()
@@ -40,11 +41,28 @@ class DailyLessonManager: ObservableObject {
             print("✅ Loaded \(backgrounds.count) background images from Supabase")
             if !backgrounds.isEmpty {
                 print("📸 First background URL: \(backgrounds[0])")
+                // Preload the first image for home screen preview
+                await preloadFirstImage(url: backgrounds[0])
             }
         } catch {
             print("❌ Failed to fetch background images: \(error)")
             // Use empty array, will fall back to default background
             self.backgroundImageURLs = []
+        }
+    }
+    
+    @MainActor
+    private func preloadFirstImage(url: String) async {
+        guard let imageURL = URL(string: url) else { return }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: imageURL)
+            if let uiImage = UIImage(data: data) {
+                self.preloadedFirstImage = uiImage
+                print("✅ Preloaded first image for home preview")
+            }
+        } catch {
+            print("⚠️ Failed to preload first image: \(error)")
         }
     }
     

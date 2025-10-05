@@ -32,7 +32,15 @@ struct DailyLessonSlideView: View {
     
     // Get preloaded image for current slide
     private var currentPreloadedImage: UIImage? {
-        return preloadedImages[currentSlideIndex]
+        // Check local cache first
+        if let cached = preloadedImages[currentSlideIndex] {
+            return cached
+        }
+        // If it's the first slide and manager has preloaded it, use that
+        if currentSlideIndex == 0, let firstImage = dailyLessonManager.preloadedFirstImage {
+            return firstImage
+        }
+        return nil
     }
     
     var body: some View {
@@ -319,11 +327,18 @@ struct DailyLessonSlideView: View {
             return
         }
         
+        // Use the already-preloaded first image from manager if available
+        if let firstImage = dailyLessonManager.preloadedFirstImage {
+            preloadedImages[0] = firstImage
+            print("✅ Using pre-cached first image from home screen")
+            imageLoaded = true
+        }
+        
         let totalSlides = lesson.slides.count
         print("🖼️ Preloading images for \(totalSlides) slides...")
         
         Task {
-            var loadedCount = 0
+            var loadedCount = preloadedImages.isEmpty ? 0 : 1 // Count first image if already loaded
             
             // Preload images for each slide
             for slideIndex in 0..<totalSlides {
