@@ -40,7 +40,7 @@ struct DailyCompletion: Codable {
     let xp_earned: Int
 }
 
-struct VerseNote: Codable, Identifiable {
+struct VerseNote: Codable, Identifiable, Equatable {
     let id: UUID
     let user_id: UUID
     let book: Int

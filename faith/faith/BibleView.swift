@@ -87,12 +87,308 @@ enum ReadingMode: String, CaseIterable {
     @State private var isHorizontalDragging = false
     @State private var showingAddNote = false
     @State private var noteVerseForEdit: BibleVerse? = nil
+    @State private var verseNotesCache: [String: [VerseNote]] = [:] // Cache for verse notes
     
     // Font size constants
     private let minFontSize: CGFloat = 12
     private let maxFontSize: CGFloat = 24
     private let fontSizeStep: CGFloat = 1
     
+    // Helper to get cached notes for a verse
+    private func getNotesForVerse(book: Int, chapter: Int, verse: Int) -> [VerseNote] {
+        let key = "\(book):\(chapter):\(verse)"
+        if let cached = verseNotesCache[key] {
+            return cached
+        }
+        let notes = userDataManager.getNotesForVerse(book: book, chapter: chapter, verse: verse)
+        return notes
+    }
+    
+    // Helper to update notes cache
+    private func updateNotesCache() {
+        var newCache: [String: [VerseNote]] = [:]
+        for verse in bibleManager.verses {
+            let key = "\(verse.book):\(verse.chapter):\(verse.verse)"
+            newCache[key] = userDataManager.getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse)
+        }
+        verseNotesCache = newCache
+    }
+    
+    
+    // MARK: - View Components
+    
+    @ViewBuilder
+    private func bibleScrollContent(horizontalPadding: CGFloat) -> some View {
+        LazyVStack(alignment: .leading, spacing: 20) {
+            // Content starts here
+            if bibleManager.isLoading {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: StyleGuide.mainBrown))
+                    Spacer()
+                }
+                .padding(.top, StyleGuide.spacing.xl)
+            } else if let errorMessage = bibleManager.errorMessage {
+                Text(errorMessage)
+                    .font(StyleGuide.merriweather(size: 14))
+                    .foregroundColor(.red)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(StyleGuide.cornerRadius.sm)
+                    .padding(.horizontal, horizontalPadding)
+            } else {
+                versesList(horizontalPadding: horizontalPadding)
+            }
+        }
+        .padding(.top, StyleGuide.spacing.md)
+        .offset(x: horizontalDragOffset)
+        .animation(isHorizontalDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: horizontalDragOffset)
+    }
+    
+    @ViewBuilder
+    private func versesList(horizontalPadding: CGFloat) -> some View {
+        ForEach(bibleManager.verses, id: \.id) { verse in
+            verseRow(verse: verse, horizontalPadding: horizontalPadding)
+        }
+        
+        // Add bottom padding for better spacing
+        Spacer()
+            .frame(height: 200)
+        
+        // Bottom detection
+        GeometryReader { geometry in
+            Color.clear.preference(
+                key: BottomDetectionPreferenceKey.self,
+                value: geometry.frame(in: .named("bibleScroll")).maxY
+            )
+        }
+        .frame(height: 1)
+    }
+    
+    @ViewBuilder
+    private func verseRow(verse: BibleVerse, horizontalPadding: CGFloat) -> some View {
+        let isSelected: Bool = selectedVerseId == verse.id
+        let highlightColor: Color? = verseHighlights[verse.id]
+        let isAnimated: Bool = animatedVerses.contains(verse.id)
+        
+        ZStack(alignment: .bottomLeading) {
+            // Highlight background for colored verses (when not selected)
+            if let color = highlightColor, !isSelected {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(color.opacity(0.4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(color.opacity(0.3), lineWidth: 1)
+                    )
+                    .shadow(color: color.opacity(0.2), radius: 4, x: 0, y: 2)
+                    .padding(.horizontal, horizontalPadding - 4)
+                    .padding(.vertical, StyleGuide.spacing.xs)
+                    .allowsHitTesting(false)
+            }
+            
+            // Enhanced card behind the selected verse
+            if isSelected {
+                verseSelectionCard(highlightColor: highlightColor, horizontalPadding: horizontalPadding)
+            }
+            
+            // Verse row content
+            verseContent(verse: verse, isSelected: isSelected, horizontalPadding: horizontalPadding)
+        }
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .compositingGroup()
+        .id(verse.id)
+        .zIndex(isSelected ? 100 : 0)
+        .opacity(isAnimated ? 1 : 0)
+        .offset(y: isAnimated ? 0 : 20)
+        .onAppear {
+            if !animatedVerses.contains(verse.id) {
+                let delay: Double = Double(verse.verse % 10) * 0.03
+                withAnimation(.easeOut(duration: 0.5).delay(delay)) {
+                    animatedVerses.insert(verse.id)
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func verseSelectionCard(highlightColor: Color?, horizontalPadding: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: highlightColor != nil ? [
+                        highlightColor!.opacity(0.5),
+                        highlightColor!.opacity(0.6),
+                        highlightColor!.opacity(0.55)
+                    ] : [
+                        readingMode.shadowLight.opacity(0.15),
+                        readingMode.cardBackground.opacity(0.95),
+                        readingMode.cardBackground.opacity(0.9)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: highlightColor != nil ? [
+                                highlightColor!.opacity(0.6),
+                                highlightColor!.opacity(0.4),
+                                highlightColor!.opacity(0.35)
+                            ] : [
+                                readingMode.shadowLight.opacity(0.8),
+                                readingMode.textColor.opacity(0.12),
+                                readingMode.textColor.opacity(0.08)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.2
+                    )
+            )
+            .shadow(color: readingMode.shadowLight, radius: 4, x: -4, y: -4)
+            .shadow(color: readingMode.shadowLight.opacity(0.7), radius: 2, x: -2, y: -2)
+            .shadow(color: (highlightColor ?? readingMode.shadowDark), radius: 8, x: 5, y: 5)
+            .shadow(color: (highlightColor ?? readingMode.shadowDark).opacity(0.5), radius: 3, x: 2, y: 2)
+            .shadow(color: readingMode.shadowLight.opacity(0.5), radius: 1, x: -1, y: -1)
+            .padding(.horizontal, horizontalPadding - 4)
+            .padding(.vertical, StyleGuide.spacing.xs)
+            .allowsHitTesting(false)
+    }
+    
+    @ViewBuilder
+    private func verseContent(verse: BibleVerse, isSelected: Bool, horizontalPadding: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: StyleGuide.spacing.sm) {
+            Text("\(verse.verse)")
+                .font(StyleGuide.merriweather(size: max(10, fontSize * 0.625), weight: .semibold))
+                .foregroundColor(readingMode.textColor.opacity(0.5))
+            
+            HStack(alignment: .top, spacing: 6) {
+                Text(LocalizedStringKey(cleanBibleText(verse.text)))
+                    .font(StyleGuide.merriweather(size: fontSize, weight: .regular))
+                    .foregroundColor(isSelected ? readingMode.textColor.opacity(0.95) : readingMode.textColor)
+                    .lineSpacing(fontSize * 0.375)
+                    .multilineTextAlignment(.leading)
+                    .shadow(color: isSelected ? readingMode.shadowLight.opacity(0.5) : Color.clear, radius: 0.5, x: 0, y: 0.5)
+                
+                if !getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse).isEmpty {
+                    Image(systemName: "note.text")
+                        .font(.system(size: fontSize * 0.75, weight: .semibold))
+                        .foregroundColor(StyleGuide.gold.opacity(0.9))
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .padding(.horizontal, horizontalPadding + 4)
+        .padding(.vertical, StyleGuide.spacing.sm)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7, blendDuration: 0.1)) {
+                if selectedVerseId == verse.id {
+                    selectedVerseId = nil
+                    showActionMenu = false
+                } else {
+                    selectedVerseId = verse.id
+                    showActionMenu = true
+                }
+            }
+        }
+        .anchorPreference(key: VerseBoundsPreferenceKey.self, value: .bounds) { anchor in
+            isSelected ? [verse.id: anchor] : [:]
+        }
+    }
+    
+    private func headerSection(horizontalPadding: CGFloat) -> some View {
+        HStack(spacing: 8) {
+            bookChapterButton
+            translationButton
+            Spacer()
+            settingsButton
+        }
+        .padding(.horizontal, horizontalPadding)
+        .padding(.top, StyleGuide.spacing.lg)
+    }
+    
+    private var bookChapterButton: some View {
+        Button(action: {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            showingBookPicker = true
+        }) {
+            Text(bibleManager.currentBook > 0 ? 
+                 "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book") \(bibleManager.currentChapter)" : 
+                 "Select Book")
+                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                .foregroundColor(readingMode.textColor)
+                .padding(.horizontal, StyleGuide.spacing.md)
+                .padding(.vertical, StyleGuide.spacing.sm)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .background(
+            RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
+                .fill(readingMode.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
+                .stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8)
+        )
+        .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
+        .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
+    }
+    
+    private var translationButton: some View {
+        Button(action: {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                showTranslationMenu.toggle()
+                showSettingsMenu = false
+            }
+        }) {
+            Text(bibleManager.currentTranslation.abbreviation)
+                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                .foregroundColor(readingMode.textColor)
+                .padding(.horizontal, StyleGuide.spacing.md)
+                .padding(.vertical, StyleGuide.spacing.sm)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .background(
+            RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
+                .fill(readingMode.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
+                .stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8)
+        )
+        .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
+        .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
+    }
+    
+    private var settingsButton: some View {
+        Button(action: {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                showSettingsMenu.toggle()
+                showTranslationMenu = false
+            }
+        }) {
+            Image(systemName: showSettingsMenu ? "xmark" : "textformat.size")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(readingMode.textColor)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(readingMode.cardBackground))
+                .overlay(Circle().stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8))
+                .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
+                .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
     
     // MARK: - Helper Functions
     
@@ -179,97 +475,13 @@ enum ReadingMode: String, CaseIterable {
     
     var body: some View {
         GeometryReader { geometry in
-            let horizontalPadding = geometry.size.width * 0.05
+            let horizontalPadding: CGFloat = geometry.size.width * 0.05
             
             VStack(spacing: 0) {
                 // Header with book/chapter selectors
                 if showNavigationArrows {
-                HStack(spacing: 8) {
-                    // Combined Book and Chapter button
-                    Button(action: {
-                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                        impactFeedback.impactOccurred()
-                        showingBookPicker = true
-                    }) {
-                        Text(bibleManager.currentBook > 0 ? 
-                             "\(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book") \(bibleManager.currentChapter)" : 
-                             "Select Book")
-                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                            .foregroundColor(readingMode.textColor)
-                            .padding(.horizontal, StyleGuide.spacing.md)
-                            .padding(.vertical, StyleGuide.spacing.sm)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .background(
-                        RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
-                            .fill(readingMode.cardBackground)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
-                            .stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8)
-                    )
-                    .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
-                    .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
-                    
-                    // Translation button
-                    Button(action: {
-                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                        impactFeedback.impactOccurred()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            showTranslationMenu.toggle()
-                            showSettingsMenu = false // Close settings menu when opening translation menu
-                        }
-                    }) {
-                        Text(bibleManager.currentTranslation.abbreviation)
-                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                            .foregroundColor(readingMode.textColor)
-                            .padding(.horizontal, StyleGuide.spacing.md)
-                            .padding(.vertical, StyleGuide.spacing.sm)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .background(
-                        RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
-                            .fill(readingMode.cardBackground)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: StyleGuide.cornerRadius.sm, style: .continuous)
-                            .stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8)
-                    )
-                    .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
-                    .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
-                    
-                    Spacer()
-                    
-                    // Settings menu button
-                    Button(action: {
-                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                        impactFeedback.impactOccurred()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            showSettingsMenu.toggle()
-                            showTranslationMenu = false // Close translation menu when opening settings menu
-                        }
-                    }) {
-                        Image(systemName: showSettingsMenu ? "xmark" : "textformat.size")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(readingMode.textColor)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                Circle()
-                                    .fill(readingMode.cardBackground)
-                            )
-                            .overlay(
-                                Circle()
-                                    .stroke(readingMode.textColor.opacity(0.06), lineWidth: 0.8)
-                            )
-                            .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
-                            .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
-                            .rotationEffect(.degrees(showSettingsMenu ? 0 : 0))
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-                .padding(.horizontal, horizontalPadding)
-                .padding(.top, StyleGuide.spacing.lg)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                    headerSection(horizontalPadding: horizontalPadding)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 
                 // Translation dropdown menu
@@ -325,181 +537,7 @@ enum ReadingMode: String, CaseIterable {
             ScrollViewReader { scrollProxy in
             ZStack(alignment: .bottom) {
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    // Content starts here
-                    if bibleManager.isLoading {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: StyleGuide.mainBrown))
-                            Spacer()
-                        }
-                        .padding(.top, StyleGuide.spacing.xl)
-                    } else if let errorMessage = bibleManager.errorMessage {
-                        Text(errorMessage)
-                            .font(StyleGuide.merriweather(size: 14))
-                            .foregroundColor(.red)
-                            .padding()
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(StyleGuide.cornerRadius.sm)
-                            .padding(.horizontal, horizontalPadding)
-                    } else {
-                        ForEach(bibleManager.verses, id: \.id) { verse in
-                            let isSelected = selectedVerseId == verse.id
-                            let highlightColor = verseHighlights[verse.id]
-                            let isAnimated = animatedVerses.contains(verse.id)
-                            ZStack(alignment: .bottomLeading) {
-                                // Highlight background for colored verses (when not selected)
-                                if let color = highlightColor, !isSelected {
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(color.opacity(0.4))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .stroke(color.opacity(0.3), lineWidth: 1)
-                                        )
-                                        .shadow(color: color.opacity(0.2), radius: 4, x: 0, y: 2)
-                                        .padding(.horizontal, horizontalPadding - 4)
-                                        .padding(.vertical, StyleGuide.spacing.xs)
-                                        .allowsHitTesting(false)
-                                }
-                                
-                                // Enhanced card behind the selected verse (with highlight color if present)
-                                if isSelected {
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: highlightColor != nil ? [
-                                                    highlightColor!.opacity(0.5),
-                                                    highlightColor!.opacity(0.6),
-                                                    highlightColor!.opacity(0.55)
-                                                ] : [
-                                                    readingMode.shadowLight.opacity(0.15),
-                                                    readingMode.cardBackground.opacity(0.95),
-                                                    readingMode.cardBackground.opacity(0.9)
-                                                ],
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
-                                            )
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .stroke(
-                                                    LinearGradient(
-                                                        colors: highlightColor != nil ? [
-                                                            highlightColor!.opacity(0.6),
-                                                            highlightColor!.opacity(0.4),
-                                                            highlightColor!.opacity(0.35)
-                                                        ] : [
-                                                            readingMode.shadowLight.opacity(0.8),
-                                                            readingMode.textColor.opacity(0.12),
-                                                            readingMode.textColor.opacity(0.08)
-                                                        ],
-                                                        startPoint: .topLeading,
-                                                        endPoint: .bottomTrailing
-                                                    ),
-                                                    lineWidth: 1.2
-                                                )
-                                        )
-                                        // Primary light shadow (strong highlight)
-                                        .shadow(color: readingMode.shadowLight, radius: 4, x: -4, y: -4)
-                                        // Secondary light shadow (soft glow)
-                                        .shadow(color: readingMode.shadowLight.opacity(0.7), radius: 2, x: -2, y: -2)
-                                        // Primary dark shadow (depth) - use highlight color if present
-                                        .shadow(color: (highlightColor ?? readingMode.shadowDark), radius: 8, x: 5, y: 5)
-                                        // Secondary dark shadow (definition)
-                                        .shadow(color: (highlightColor ?? readingMode.shadowDark).opacity(0.5), radius: 3, x: 2, y: 2)
-                                        // Inner highlight
-                                        .shadow(color: readingMode.shadowLight.opacity(0.5), radius: 1, x: -1, y: -1)
-                                        .padding(.horizontal, horizontalPadding - 4)
-                                        .padding(.vertical, StyleGuide.spacing.xs)
-                                        .allowsHitTesting(false)
-                                }
-
-                                // Verse row content
-                                HStack(alignment: .top, spacing: StyleGuide.spacing.sm) {
-                                    // Minimal verse number
-                                    Text("\(verse.verse)")
-                                        .font(StyleGuide.merriweather(size: max(10, fontSize * 0.625), weight: .semibold))
-                                        .foregroundColor(readingMode.textColor.opacity(0.5))
-                                    
-                                    HStack(alignment: .top, spacing: 6) {
-                                        Text(LocalizedStringKey(cleanBibleText(verse.text)))
-                                            .font(StyleGuide.merriweather(size: fontSize, weight: .regular))
-                                            .foregroundColor(isSelected ? readingMode.textColor.opacity(0.95) : readingMode.textColor)
-                                            .lineSpacing(fontSize * 0.375)
-                                            .multilineTextAlignment(.leading)
-                                            .shadow(color: isSelected ? readingMode.shadowLight.opacity(0.5) : Color.clear, radius: 0.5, x: 0, y: 0.5)
-                                        
-                                        // Note indicator icon - moved to the right side
-                                        if !userDataManager.getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse).isEmpty {
-                                            Image(systemName: "note.text")
-                                                .font(.system(size: fontSize * 0.75, weight: .semibold))
-                                                .foregroundColor(StyleGuide.gold.opacity(0.9))
-                                                .padding(.top, 2)
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal, horizontalPadding + 4)
-                                .padding(.vertical, StyleGuide.spacing.sm)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    // Haptic feedback for verse selection
-                                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                                    impactFeedback.impactOccurred()
-                                    
-                                    // More responsive spring animation with gentle bounce
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7, blendDuration: 0.1)) {
-                                        if selectedVerseId == verse.id {
-                                            // If same verse is tapped again, deselect it
-                                            selectedVerseId = nil
-                                            showActionMenu = false
-                                        } else {
-                                            // If different verse is tapped, select it and show menu
-                                            selectedVerseId = verse.id
-                                            showActionMenu = true
-                                        }
-                                    }
-                                }
-                                .anchorPreference(key: VerseBoundsPreferenceKey.self, value: .bounds) { anchor in
-                                    isSelected ? [verse.id: anchor] : [:]
-                                }
-                            }
-                            .scaleEffect(isSelected ? 1.02 : 1.0)
-                            .compositingGroup()
-                            .id(verse.id)
-                            .zIndex(isSelected ? 100 : 0)
-                            // Entrance animation
-                            .opacity(isAnimated ? 1 : 0)
-                            .offset(y: isAnimated ? 0 : 20)
-                            .onAppear {
-                                // Only animate if this verse hasn't been animated yet
-                                if !animatedVerses.contains(verse.id) {
-                                    // Stagger the animation based on verse number for a cascading effect
-                                    let delay = Double(verse.verse % 10) * 0.03
-                                    withAnimation(.easeOut(duration: 0.5).delay(delay)) {
-                                        animatedVerses.insert(verse.id)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Add bottom padding for better spacing
-                        Spacer()
-                            .frame(height: 200)
-                        
-                        // Bottom detection
-                        GeometryReader { geometry in
-                            Color.clear.preference(
-                                key: BottomDetectionPreferenceKey.self,
-                                value: geometry.frame(in: .named("bibleScroll")).maxY
-                            )
-                        }
-                        .frame(height: 1)
-                    }
-                }
-                .padding(.top, StyleGuide.spacing.md)
-                .offset(x: horizontalDragOffset)
-                .animation(isHorizontalDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: horizontalDragOffset)
+                bibleScrollContent(horizontalPadding: horizontalPadding)
             }
             .coordinateSpace(name: "bibleScroll")
             .onPreferenceChange(BottomDetectionPreferenceKey.self) { maxY in
@@ -606,7 +644,7 @@ enum ReadingMode: String, CaseIterable {
                         // Position menu using top-left offset
                         VerseActionMenu(
                             currentHighlightColor: verseHighlights[verse.id],
-                            existingNotes: userDataManager.getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse),
+                            existingNotes: getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse),
                             copyAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                 impactFeedback.impactOccurred()
@@ -742,11 +780,7 @@ enum ReadingMode: String, CaseIterable {
         .animation(.easeInOut(duration: 0.4), value: readingMode)
         .animation(.easeInOut(duration: 0.3), value: showNavigationArrows)
         .onAppear {
-            print("📖 BibleView appeared - refreshing notes")
-            // Refresh user data to get latest notes
-            Task {
-                await userDataManager.fetchUserData()
-            }
+            print("📖 BibleView appeared")
             
             // Apply pending selection if any
             if let sel = bibleNavigator.pendingSelection {
@@ -766,6 +800,8 @@ enum ReadingMode: String, CaseIterable {
                     bibleManager.loadVerses(book: 1, chapter: 1)
                 }
             }
+            // Initialize notes cache
+            updateNotesCache()
         }
         .onChange(of: bibleNavigator.pendingSelection) { newValue in
             guard let sel = newValue else { return }
@@ -788,10 +824,16 @@ enum ReadingMode: String, CaseIterable {
             showActionMenu = false
             isAtBottom = false
             animatedVerses.removeAll() // Reset animations for new chapter
+            // Update notes cache for new chapter
+            updateNotesCache()
             // Show navigation arrows when chapter changes
             withAnimation(.easeInOut(duration: 0.3)) {
                 showNavigationArrows = true
             }
+        }
+        .onChange(of: userDataManager.verseNotes) { _ in
+            // Update cache when notes change
+            updateNotesCache()
         }
         .onChange(of: readingMode) { newMode in
             UserDefaults.standard.set(newMode.rawValue, forKey: "bibleReadingMode")

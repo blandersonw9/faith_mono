@@ -50,19 +50,21 @@ struct ContentView: View {
             }
             
             
-            // Main Content Area
-            Group {
-                if selectedTab == 0 {
-                    // Tab 1: Home
-                    HomeView()
-                        .environmentObject(userDataManager)
-                        .environmentObject(bibleNavigator)
-                } else if selectedTab == 1 {
-                    // Tab 2: Bible
-                    BibleView()
-                        .environmentObject(userDataManager)
-                        .environmentObject(bibleNavigator)
-                }
+            // Main Content Area - Keep views in memory but toggle visibility
+            ZStack {
+                // Tab 1: Home
+                HomeView()
+                    .environmentObject(userDataManager)
+                    .environmentObject(bibleNavigator)
+                    .opacity(selectedTab == 0 ? 1 : 0)
+                    .zIndex(selectedTab == 0 ? 1 : 0)
+                
+                // Tab 2: Bible
+                BibleView()
+                    .environmentObject(userDataManager)
+                    .environmentObject(bibleNavigator)
+                    .opacity(selectedTab == 1 ? 1 : 0)
+                    .zIndex(selectedTab == 1 ? 1 : 0)
             }
             }
             // Place the custom tab bar at the absolute bottom and, for the Bible tab only,
