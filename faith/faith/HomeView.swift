@@ -203,9 +203,20 @@ struct TodayContent: View {
             }
         )
         .cornerRadius(12)
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 8)
         .fullScreenCover(isPresented: $showLesson) {
             DailyLessonSlideView(dailyLessonManager: dailyLessonManager, userDataManager: userDataManager)
                 .ignoresSafeArea()
+        }
+        .onChange(of: showLesson) { isShowing in
+            // Refresh data when returning from lesson
+            if !isShowing {
+                Task {
+                    await userDataManager.fetchUserData()
+                    await dailyLessonManager.fetchTodaysLesson()
+                }
+            }
         }
     }
 }
@@ -256,8 +267,10 @@ struct WeeklyStreakView: View {
             HStack(spacing: 8) {
                 ForEach(0..<7) { day in
                     DayCircle(dayIndex: day, dayState: dayStates[day])
+                        .id("\(day)-\(dayStates[day].hashValue)")
                 }
             }
+            .id(dayStates.hashValue)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -267,6 +280,8 @@ struct WeeklyStreakView: View {
                 .stroke(StyleGuide.mainBrown.opacity(0.25), lineWidth: 1)
         )
         .cornerRadius(12)
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+        .shadow(color: .black.opacity(0.04), radius: 16, x: 0, y: 4)
         .frame(height: 100)
     }
 }
@@ -306,11 +321,11 @@ struct DayCircle: View {
     private var textColor: Color {
         switch dayState {
         case .complete:
-            return Color(hex: "D4AF37") // Gold text for completed
+            return .white // White text on completed (brown) background
         case .current:
-            return .white // White text on gold background
+            return Color(hex: "D4AF37") // Gold text on current day
         case .incomplete:
-            return Color(hex: "D4AF37").opacity(0.5) // Light blue-gray for incomplete
+            return Color(hex: "D4AF37").opacity(0.5) // Faded gold for incomplete
         }
     }
     
@@ -320,7 +335,7 @@ struct DayCircle: View {
             Group {
                 switch dayState {
                 case .complete:
-                    Image("streakFill")
+                    Image("streakActive")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 36, height: 36)
@@ -331,7 +346,7 @@ struct DayCircle: View {
                         .frame(width: 36, height: 36)
                         .opacity(0.5)
                 case .current:
-                    Image("streakActive")
+                    Image("streakFill")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 36, height: 36)
@@ -347,7 +362,7 @@ struct DayCircle: View {
     }
 }
 
-enum DayState {
+enum DayState: Hashable {
     case complete     // Day completed successfully
     case incomplete   // Day not completed (includes past and future)
     case current      // Current day

@@ -4,7 +4,8 @@
 
 CREATE OR REPLACE FUNCTION update_progress(
   p_activity_type TEXT,
-  p_xp_earned INTEGER DEFAULT 10
+  p_xp_earned INTEGER DEFAULT 10,
+  p_completion_date DATE DEFAULT NULL
 )
 RETURNS JSON
 LANGUAGE plpgsql
@@ -31,8 +32,8 @@ BEGIN
     );
   END IF;
   
-  -- Get today's date
-  v_today := CURRENT_DATE;
+  -- Use provided date or fall back to server's current date
+  v_today := COALESCE(p_completion_date, CURRENT_DATE);
   
   -- Check if user already completed this activity today
   SELECT EXISTS(

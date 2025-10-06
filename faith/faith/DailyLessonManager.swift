@@ -22,6 +22,7 @@ class DailyLessonManager: ObservableObject {
     
     private let supabase: SupabaseClient
     private var cancellables = Set<AnyCancellable>()
+    private var isFetchingLesson = false // Prevent duplicate concurrent fetches
     
     init(supabase: SupabaseClient) {
         self.supabase = supabase
@@ -119,6 +120,13 @@ class DailyLessonManager: ObservableObject {
     
     @MainActor
     func fetchTodaysLesson() async {
+        // Prevent duplicate concurrent fetches
+        guard !isFetchingLesson else {
+            print("⚠️ Fetch already in progress, skipping duplicate request")
+            return
+        }
+        
+        isFetchingLesson = true
         isLoading = true
         state = .loading
         errorMessage = nil
@@ -144,6 +152,7 @@ class DailyLessonManager: ObservableObject {
         }
         
         isLoading = false
+        isFetchingLesson = false
     }
     
     // MARK: - Supabase Fetch

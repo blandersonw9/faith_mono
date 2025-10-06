@@ -111,6 +111,8 @@ class UserDataManager: ObservableObject {
     @Published var verseNotes: [VerseNote] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var lastRefreshDate = Date() // Force UI updates
+    @Published var hasLoadedInitialData = false // Track if we've loaded data at least once
     
     nonisolated(unsafe) private let supabase: SupabaseClient
     private var cancellables = Set<AnyCancellable>()
@@ -158,17 +160,16 @@ class UserDataManager: ObservableObject {
                 print("✅ Current streak: \(progress?.current_streak ?? 0)")
             } catch {
                 print("⚠️ Progress not found (optional): \(error.localizedDescription)")
-                self.userProgress = nil
+                // Keep existing data on error - don't clear
             }
             
             // Fetch completions (optional)
             do {
                 let completions = try await completionsTask
                 self.dailyCompletions = completions
-                print("✅ Daily completions: \(completions.count)")
             } catch {
                 print("⚠️ Completions not found (optional): \(error.localizedDescription)")
-                self.dailyCompletions = []
+                // Keep existing data on error - don't clear
             }
             
             // Fetch notes (critical for this feature)
@@ -178,15 +179,25 @@ class UserDataManager: ObservableObject {
                 print("✅ Verse notes: \(notes.count)")
             } catch {
                 print("⚠️ Notes fetch error: \(error.localizedDescription)")
-                self.verseNotes = []
+                // Keep existing data on error - don't clear
             }
             
             print("✅ Finished loading user data successfully")
+            
+            // Mark that we've loaded data at least once
+            await MainActor.run {
+                self.hasLoadedInitialData = true
+            }
             
         } catch {
             print("❌ Error getting auth session: \(error)")
             print("❌ Error details: \(error.localizedDescription)")
             self.errorMessage = error.localizedDescription
+        }
+        
+        // Update refresh date to force UI updates
+        await MainActor.run {
+            self.lastRefreshDate = Date()
         }
         
         isLoading = false
@@ -269,9 +280,12 @@ class UserDataManager: ObservableObject {
     }
     
     func isDateCompleted(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withFullDate]
-        let dateString = dateFormatter.string(from: date)
+        let dateString = dateFormatter.string(from: startOfDay)
         
         return dailyCompletions.contains { completion in
             completion.completion_date.starts(with: dateString)
@@ -281,11 +295,12 @@ class UserDataManager: ObservableObject {
     func getWeekDayStates() -> [DayState] {
         let calendar = Calendar.current
         let today = Date()
+        let startOfToday = calendar.startOfDay(for: today)
         
         // Get start of current week (Sunday)
-        let weekday = calendar.component(.weekday, from: today)
+        let weekday = calendar.component(.weekday, from: startOfToday)
         let daysToSubtract = weekday - 1 // Sunday is 1
-        let startOfWeek = calendar.date(byAdding: .day, value: -daysToSubtract, to: today)!
+        let startOfWeek = calendar.date(byAdding: .day, value: -daysToSubtract, to: startOfToday)!
         
         var states: [DayState] = []
         
@@ -296,13 +311,14 @@ class UserDataManager: ObservableObject {
             }
             
             let isToday = calendar.isDate(date, inSameDayAs: today)
-            let isPast = date < calendar.startOfDay(for: today)
             let isCompleted = isDateCompleted(date)
             
-            if isToday {
-                states.append(.current)
-            } else if isCompleted {
+            // Show completed state if the day is done, even if it's today
+            if isCompleted {
                 states.append(.complete)
+            } else if isToday {
+                // Show current state only if today is not yet completed
+                states.append(.current)
             } else {
                 states.append(.incomplete)
             }
@@ -317,12 +333,20 @@ class UserDataManager: ObservableObject {
     func updateProgressAndStreak(activityType: String = "daily_practice", xpEarned: Int = 10) async throws {
         print("🔄 Updating progress and streak for activity: \(activityType)")
         
+        // Get today's date in user's local timezone
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withFullDate]
+        let localDateString = dateFormatter.string(from: today)
+        
         // Wrap in Task to avoid MainActor isolation issues
         try await Task {
             // Define structs locally within the task
             struct UpdateProgressParams: Codable {
                 let p_activity_type: String
                 let p_xp_earned: Int
+                let p_completion_date: String
             }
             
             struct UpdateProgressResponse: Codable {
@@ -339,7 +363,8 @@ class UserDataManager: ObservableObject {
             do {
                 let params = UpdateProgressParams(
                     p_activity_type: activityType,
-                    p_xp_earned: xpEarned
+                    p_xp_earned: xpEarned,
+                    p_completion_date: localDateString
                 )
                 
                 let response: UpdateProgressResponse = try await supabase
