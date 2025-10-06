@@ -12,6 +12,7 @@ import UIKit
 // MARK: - Daily Lesson Slide View
 struct DailyLessonSlideView: View {
     @ObservedObject var dailyLessonManager: DailyLessonManager
+    @ObservedObject var userDataManager: UserDataManager
     @Environment(\.dismiss) private var dismiss
     @State private var currentSlideIndex: Int = 0
     @State private var showingShareSheet: Bool = false
@@ -289,7 +290,19 @@ struct DailyLessonSlideView: View {
             }
         }
         .onAppear {
-            currentSlideIndex = dailyLessonManager.currentProgress?.currentSlideIndex ?? 0
+            // If today is completed, start from beginning for review
+            // Otherwise, resume from saved progress
+            let today = Date()
+            let isCompletedToday = userDataManager.isDateCompleted(today)
+            
+            if isCompletedToday {
+                currentSlideIndex = 0
+                print("🔄 Starting review from beginning")
+            } else {
+                currentSlideIndex = dailyLessonManager.currentProgress?.currentSlideIndex ?? 0
+                print("🔄 Resuming from slide \(currentSlideIndex)")
+            }
+            
             imageLoaded = false
             
             print("🎬 Daily lesson appeared. Background URLs count: \(dailyLessonManager.backgroundImageURLs.count)")
@@ -415,6 +428,16 @@ struct DailyLessonSlideView: View {
                     to: currentSlideIndex,
                     isCompleted: true
                 )
+                
+                // Update user's streak and progress
+                do {
+                    try await userDataManager.updateProgressAndStreak(activityType: "daily_practice", xpEarned: 10)
+                    print("✅ Successfully updated streak after completing lesson")
+                } catch {
+                    print("⚠️ Failed to update streak: \(error.localizedDescription)")
+                    // Don't block dismissal even if streak update fails
+                }
+                
                 // Dismiss the view after marking as completed
                 await MainActor.run {
                     dismiss()

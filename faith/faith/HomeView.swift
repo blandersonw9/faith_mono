@@ -34,16 +34,16 @@ struct HomeView: View {
                             .frame(height: 220)
                             .foregroundColor(StyleGuide.gold)
                     }
+                    .padding(.bottom, -80) // Negative padding to pull content up without offset
                     
                     // Weekly Streak Section
                     WeeklyStreakView(userDataManager: userDataManager, showingProfile: $showingProfile)
                         .padding(.horizontal, horizontalPadding)
-                        .offset(y: -80)
+                        .zIndex(1) // Ensure it's above other content
                     
                     // Today Content Section
-                    TodayContent(dailyLessonManager: dailyLessonManager)
+                    TodayContent(dailyLessonManager: dailyLessonManager, userDataManager: userDataManager)
                         .padding(.horizontal, horizontalPadding)
-                        .offset(y: -80)
                     
                     // Bottom spacing for better scrolling
                     Spacer()
@@ -74,6 +74,7 @@ struct HomeView: View {
 // MARK: - Today Content
 struct TodayContent: View {
     @ObservedObject var dailyLessonManager: DailyLessonManager
+    @ObservedObject var userDataManager: UserDataManager
     @State private var showLesson: Bool = false
     
     // Get today's date formatted
@@ -105,6 +106,41 @@ struct TodayContent: View {
         return verseText
     }
     
+    // Determine button state based on progress
+    private var buttonText: String {
+        // Check if today is completed
+        let today = Date()
+        if userDataManager.isDateCompleted(today) {
+            return "Review"
+        }
+        
+        // Check if lesson is in progress
+        if let progress = dailyLessonManager.currentProgress,
+           progress.currentSlideIndex > 0,
+           !progress.isCompleted {
+            return "Continue"
+        }
+        
+        // Not started
+        return "Start"
+    }
+    
+    private var buttonBackgroundColor: Color {
+        let today = Date()
+        if userDataManager.isDateCompleted(today) {
+            return StyleGuide.mainBrown.opacity(0.3)
+        }
+        return StyleGuide.backgroundBeige
+    }
+    
+    private var buttonTextColor: Color {
+        let today = Date()
+        if userDataManager.isDateCompleted(today) {
+            return .white.opacity(0.7)
+        }
+        return StyleGuide.mainBrown
+    }
+    
     var body: some View {
         VStack(spacing: 28) {
             // TOP: Daily practice date (dynamic)
@@ -123,14 +159,14 @@ struct TodayContent: View {
                 .lineSpacing(6)
                 .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
             
-            // BOTTOM: Continue button -> full screen cover story
+            // BOTTOM: Dynamic button (Start / Continue / Review)
             Button(action: { showLesson = true }) {
-                Text("Continue")
+                Text(buttonText)
                     .font(StyleGuide.merriweather(size: 14, weight: .semibold))
-                    .foregroundColor(StyleGuide.mainBrown)
+                    .foregroundColor(buttonTextColor)
                     .frame(maxWidth: .infinity)
                     .frame(height: 45)
-                    .background(StyleGuide.backgroundBeige)
+                    .background(buttonBackgroundColor)
                     .cornerRadius(12)
                     .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
             }
@@ -168,7 +204,7 @@ struct TodayContent: View {
         )
         .cornerRadius(12)
         .fullScreenCover(isPresented: $showLesson) {
-            DailyLessonSlideView(dailyLessonManager: dailyLessonManager)
+            DailyLessonSlideView(dailyLessonManager: dailyLessonManager, userDataManager: userDataManager)
                 .ignoresSafeArea()
         }
     }
@@ -180,68 +216,58 @@ struct WeeklyStreakView: View {
     @Binding var showingProfile: Bool
     
     var body: some View {
-        GeometryReader { geometry in
-            let screenWidth = geometry.size.width
-            let streakWidth = screenWidth * 0.90
-            let dayStates = userDataManager.getWeekDayStates()
-            
+        let dayStates = userDataManager.getWeekDayStates()
+        
+        VStack(spacing: 16) {
+            // First row: NAME -------- Streak
             HStack {
-                Spacer()
-                
-                VStack(spacing: 16) {
-                    // First row: NAME -------- Streak
-                    HStack {
                         // Username button - navigates to profile
                         Button(action: {
                             showingProfile = true
                         }) {
-                            HStack(spacing: 4) {
-                                Text(userDataManager.getDisplayName())
-                                    .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                                    .foregroundColor(StyleGuide.mainBrown)
-                                
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.4))
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                    HStack(spacing: 4) {
+                        Text(userDataManager.getDisplayName())
+                            .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown)
                         
-                        Spacer()
-                        
-                        HStack(spacing: StyleGuide.spacing.xs) {
-                            Image("streak")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 20, height: 20)
-                            
-                            Text("\(userDataManager.getCurrentStreak())")
-                                .font(StyleGuide.merriweather(size: 16, weight: .semibold))
-                                .foregroundColor(StyleGuide.gold)
-                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown.opacity(0.4))
                     }
-                    
-                    // Second row: circles with each day of week
-                    HStack(spacing: 8) {
-                        ForEach(0..<7) { day in
-                            DayCircle(dayIndex: day, dayState: dayStates[day])
-                        }
-                    }
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .frame(width: streakWidth)
-                .background(StyleGuide.backgroundBeige)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(StyleGuide.mainBrown.opacity(0.25), lineWidth: 1)
-                )
-                .cornerRadius(12)
+                .buttonStyle(.plain)
                 
                 Spacer()
+                
+                HStack(spacing: StyleGuide.spacing.xs) {
+                    Image("streak")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                    
+                    Text("\(userDataManager.getCurrentStreak())")
+                        .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                        .foregroundColor(StyleGuide.gold)
+                }
+            }
+            
+            // Second row: circles with each day of week
+            HStack(spacing: 8) {
+                ForEach(0..<7) { day in
+                    DayCircle(dayIndex: day, dayState: dayStates[day])
+                }
             }
         }
-        .frame(height: 80)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(StyleGuide.backgroundBeige)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(StyleGuide.mainBrown.opacity(0.25), lineWidth: 1)
+        )
+        .cornerRadius(12)
+        .frame(height: 100)
     }
 }
 

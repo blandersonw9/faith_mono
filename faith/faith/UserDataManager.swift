@@ -112,7 +112,7 @@ class UserDataManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let supabase: SupabaseClient
+    nonisolated(unsafe) private let supabase: SupabaseClient
     private var cancellables = Set<AnyCancellable>()
     weak var authManager: AuthManager?
     
@@ -312,6 +312,65 @@ class UserDataManager: ObservableObject {
     }
     
     // MARK: - Update Methods
+    
+    @MainActor
+    func updateProgressAndStreak(activityType: String = "daily_practice", xpEarned: Int = 10) async throws {
+        print("🔄 Updating progress and streak for activity: \(activityType)")
+        
+        // Wrap in Task to avoid MainActor isolation issues
+        try await Task {
+            // Define structs locally within the task
+            struct UpdateProgressParams: Codable {
+                let p_activity_type: String
+                let p_xp_earned: Int
+            }
+            
+            struct UpdateProgressResponse: Codable {
+                let success: Bool
+                let current_streak: Int?
+                let longest_streak: Int?
+                let total_xp: Int?
+                let current_level: Int?
+                let xp_earned: Int?
+                let message: String?
+                let error: String?
+            }
+            
+            do {
+                let params = UpdateProgressParams(
+                    p_activity_type: activityType,
+                    p_xp_earned: xpEarned
+                )
+                
+                let response: UpdateProgressResponse = try await supabase
+                    .rpc("update_progress", params: params)
+                    .execute()
+                    .value
+                
+                if response.success {
+                    print("✅ Progress updated successfully!")
+                    if let streak = response.current_streak {
+                        print("🔥 Current streak: \(streak)")
+                    }
+                    if let xp = response.total_xp {
+                        print("⭐ Total XP: \(xp)")
+                    }
+                } else {
+                    let errorMsg = response.error ?? "Unknown error"
+                    print("⚠️ Progress update failed: \(errorMsg)")
+                    if !errorMsg.contains("already completed") {
+                        throw NSError(domain: "UserDataManager", code: 1, userInfo: [NSLocalizedDescriptionKey: errorMsg])
+                    }
+                }
+            } catch {
+                print("❌ Error calling update_progress: \(error)")
+                throw error
+            }
+        }.value
+        
+        // Refresh user data on MainActor to update UI
+        await fetchUserData()
+    }
     
     @MainActor
     func markTodayComplete(activityType: String = "daily_practice") async throws {

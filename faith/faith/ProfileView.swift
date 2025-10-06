@@ -198,8 +198,13 @@ struct ProfileView: View {
                                 ForEach(sortedGroups.prefix(5), id: \.key) { key, notesForVerse in
                                     if let firstNote = notesForVerse.first {
                                         Button(action: {
+                                            print("📝 NOTE BUTTON CLICKED")
+                                            print("   Note: \(firstNote.verseReference)")
+                                            print("   showingEditNote before: \(showingEditNote)")
                                             selectedNote = firstNote
                                             showingEditNote = true
+                                            print("   showingEditNote after: \(showingEditNote)")
+                                            print("   selectedNote: \(selectedNote?.verseReference ?? "none")")
                                         }) {
                                             HStack(alignment: .top, spacing: 12) {
                                                 // Note icon
@@ -413,16 +418,31 @@ struct ProfileView: View {
             }
         }
         .sheet(isPresented: $showingEditNote) {
-            if let note = selectedNote {
-                NoteEditorFromProfileView(
-                    note: note,
-                    userDataManager: userDataManager,
-                    onDismiss: {
-                        showingEditNote = false
-                        selectedNote = nil
+            Group {
+                if let note = selectedNote {
+                    NoteEditorFromProfileView(
+                        note: note,
+                        userDataManager: userDataManager,
+                        onDismiss: {
+                            print("📋 onDismiss called")
+                            showingEditNote = false
+                            selectedNote = nil
+                        }
+                    )
+                    .onAppear {
+                        print("📋 Sheet content appeared with note: \(note.verseReference)")
                     }
-                )
+                } else {
+                    Text("No note selected")
+                        .onAppear {
+                            print("❌ Sheet showing error - selectedNote is nil")
+                        }
+                }
             }
+        }
+        .onChange(of: showingEditNote) { newValue in
+            print("🔔 showingEditNote changed to: \(newValue)")
+            print("   selectedNote: \(selectedNote?.verseReference ?? "nil")")
         }
         .onAppear {
             print("👤 ProfileView appeared - refreshing data")
@@ -448,12 +468,17 @@ struct NoteEditorFromProfileView: View {
         contentView
             .onAppear {
                 print("🔄 NoteEditorFromProfileView appeared")
+                print("   Note: book=\(note.book), chapter=\(note.chapter), verse=\(note.verse)")
                 print("   Loading verse: \(note.verseReference)")
                 bibleManager.loadVerses(book: note.book, chapter: note.chapter)
+                print("   BibleManager.isLoading: \(bibleManager.isLoading)")
+                print("   BibleManager.verses.count: \(bibleManager.verses.count)")
+                print("   BibleManager.errorMessage: \(bibleManager.errorMessage ?? "none")")
             }
             .onChange(of: bibleManager.verses) { verses in
-                print("📖 Verses changed: \(verses.count)")
+                print("📖 Verses changed: \(verses.count) verses loaded")
                 findVerse(in: verses)
+                print("   loadedVerse found: \(loadedVerse != nil)")
             }
     }
     
@@ -530,12 +555,17 @@ struct NoteEditorFromProfileView: View {
     }
     
     private func findVerse(in verses: [BibleVerse]) {
+        print("🔍 Searching for verse in \(verses.count) verses")
+        print("   Looking for: book=\(note.book), chapter=\(note.chapter), verse=\(note.verse)")
+        
         if let verse = verses.first(where: { $0.book == note.book && $0.chapter == note.chapter && $0.verse == note.verse }) {
             print("✅ Found verse: \(verse.formattedReference)")
             loadedVerse = verse
         } else if !verses.isEmpty {
-            print("⚠️ Verse not found")
-            print("   Looking for: \(note.book):\(note.chapter):\(note.verse)")
+            print("⚠️ Verse not found in loaded verses")
+            print("   First verse: book=\(verses.first?.book ?? -1), chapter=\(verses.first?.chapter ?? -1), verse=\(verses.first?.verse ?? -1)")
+        } else {
+            print("⚠️ No verses loaded yet")
         }
     }
 }
