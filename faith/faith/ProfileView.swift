@@ -9,7 +9,9 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var bibleNavigator: BibleNavigator
     @ObservedObject var userDataManager: UserDataManager
+    @Environment(\.dismiss) private var dismiss
     @State private var showCopiedFeedback = false
     @State private var showingEditNote = false
     @State private var selectedNote: VerseNote? = nil
@@ -297,6 +299,183 @@ struct ProfileView: View {
                                                 .foregroundColor(StyleGuide.gold)
                                             
                                             Text("View All (\(sortedGroups.count) verses)")
+                                                .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                                .foregroundColor(StyleGuide.gold)
+                                            
+                                            Spacer()
+                                            
+                                            Image(systemName: "arrow.right")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundColor(StyleGuide.gold.opacity(0.7))
+                                        }
+                                        .padding(StyleGuide.spacing.md)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .fill(StyleGuide.gold.opacity(0.12))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .stroke(StyleGuide.gold.opacity(0.3), lineWidth: 1.5)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                        }
+                    }
+                    
+                    // Saved Verses Section
+                    VStack(spacing: StyleGuide.spacing.md) {
+                        HStack {
+                            Text("Saved Verses")
+                                .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                                .textCase(.uppercase)
+                            
+                            Spacer()
+                            
+                            Text("\(userDataManager.savedVerses.count)")
+                                .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.4))
+                        }
+                        .padding(.horizontal, StyleGuide.spacing.lg)
+                        
+                        if userDataManager.savedVerses.isEmpty {
+                            // Empty state
+                            VStack(spacing: StyleGuide.spacing.sm) {
+                                Image(systemName: "heart")
+                                    .font(.system(size: 32, weight: .light))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.3))
+                                
+                                Text("No saved verses yet")
+                                    .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                                
+                                Text("Save verses while reading the Bible")
+                                    .font(StyleGuide.merriweather(size: 12, weight: .regular))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.4))
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, StyleGuide.spacing.xl)
+                            .background(StyleGuide.backgroundBeige)
+                            .cornerRadius(12)
+                            .shadow(color: StyleGuide.shadows.sm, radius: 4, x: 0, y: 2)
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                        } else {
+                            // Saved verses list
+                            VStack(spacing: StyleGuide.spacing.sm) {
+                                ForEach(userDataManager.savedVerses.prefix(5)) { savedVerse in
+                                    Button(action: {
+                                        // Haptic feedback
+                                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                                        generator.impactOccurred()
+                                        
+                                        print("📍 Navigating to saved verse: \(savedVerse.verseReference)")
+                                        print("   Book: \(savedVerse.book), Chapter: \(savedVerse.chapter), Verse: \(savedVerse.verse)")
+                                        
+                                        // Navigate to the verse in Bible view
+                                        bibleNavigator.open(
+                                            book: savedVerse.book,
+                                            chapter: savedVerse.chapter,
+                                            verse: savedVerse.verse
+                                        )
+                                        
+                                        print("   pendingSelection set to: \(bibleNavigator.pendingSelection?.book ?? -1):\(bibleNavigator.pendingSelection?.chapter ?? -1):\(bibleNavigator.pendingSelection?.verse ?? -1)")
+                                        
+                                        // Dismiss profile view after a brief delay to ensure navigation is set
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                            dismiss()
+                                        }
+                                    }) {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            // Verse reference with translation
+                                            HStack(spacing: 8) {
+                                                Image(systemName: "heart.fill")
+                                                    .font(.system(size: 14, weight: .medium))
+                                                    .foregroundColor(StyleGuide.gold)
+                                                
+                                                Text(savedVerse.verseReference)
+                                                    .font(StyleGuide.merriweather(size: 14, weight: .bold))
+                                                    .foregroundColor(StyleGuide.mainBrown)
+                                                
+                                                Spacer()
+                                                
+                                                if let translation = savedVerse.translation {
+                                                    Text(translation)
+                                                        .font(StyleGuide.merriweather(size: 10, weight: .semibold))
+                                                        .foregroundColor(StyleGuide.gold.opacity(0.8))
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background(
+                                                            Capsule()
+                                                                .fill(StyleGuide.gold.opacity(0.15))
+                                                        )
+                                                }
+                                                
+                                                // Chevron indicator
+                                                Image(systemName: "chevron.right")
+                                                    .font(.system(size: 12, weight: .semibold))
+                                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.25))
+                                            }
+                                            
+                                            // Verse text
+                                            Text(savedVerse.verse_text)
+                                                .font(StyleGuide.merriweather(size: 13, weight: .regular))
+                                                .foregroundColor(StyleGuide.mainBrown.opacity(0.75))
+                                                .lineLimit(3)
+                                                .lineSpacing(3)
+                                                .multilineTextAlignment(.leading)
+                                            
+                                            // Date
+                                            Text(savedVerse.relativeDate)
+                                                .font(StyleGuide.merriweather(size: 11, weight: .medium))
+                                                .foregroundColor(StyleGuide.mainBrown.opacity(0.45))
+                                        }
+                                        .padding(StyleGuide.spacing.md)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .fill(Color.white.opacity(0.7))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(StyleGuide.mainBrown.opacity(0.08), lineWidth: 1)
+                                        )
+                                        .shadow(color: StyleGuide.shadows.sm, radius: 3, x: 0, y: 2)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            Task {
+                                                do {
+                                                    try await userDataManager.unsaveVerse(
+                                                        book: savedVerse.book,
+                                                        chapter: savedVerse.chapter,
+                                                        verse: savedVerse.verse,
+                                                        translation: savedVerse.translation
+                                                    )
+                                                } catch {
+                                                    print("❌ Error unsaving verse: \(error)")
+                                                }
+                                            }
+                                        } label: {
+                                            Label("Remove from Saved", systemImage: "heart.slash")
+                                        }
+                                    }
+                                }
+                                
+                                // "View All" button if more than 5 saved verses
+                                if userDataManager.savedVerses.count > 5 {
+                                    Button(action: {
+                                        // TODO: Navigate to all saved verses view
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "heart.text.square")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(StyleGuide.gold)
+                                            
+                                            Text("View All (\(userDataManager.savedVerses.count) verses)")
                                                 .font(StyleGuide.merriweather(size: 14, weight: .semibold))
                                                 .foregroundColor(StyleGuide.gold)
                                             

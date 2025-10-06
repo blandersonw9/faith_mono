@@ -102,6 +102,66 @@ struct VerseNote: Codable, Identifiable, Equatable {
     }
 }
 
+struct SavedVerse: Codable, Identifiable, Equatable {
+    let id: UUID
+    let user_id: UUID
+    let book: Int
+    let chapter: Int
+    let verse: Int
+    let verse_text: String
+    let translation: String?
+    let created_at: String
+    
+    var verseReference: String {
+        let bookName = BibleManager.bookNames[book] ?? "Unknown"
+        return "\(bookName) \(chapter):\(verse)"
+    }
+    
+    var formattedDate: String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: created_at) {
+            let displayFormatter = DateFormatter()
+            displayFormatter.dateStyle = .medium
+            displayFormatter.timeStyle = .short
+            return displayFormatter.string(from: date)
+        }
+        
+        // Fallback
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: created_at) {
+            let displayFormatter = DateFormatter()
+            displayFormatter.dateStyle = .medium
+            displayFormatter.timeStyle = .short
+            return displayFormatter.string(from: date)
+        }
+        
+        return "Recently"
+    }
+    
+    var relativeDate: String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: created_at) {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            return formatter.localizedString(for: date, relativeTo: Date())
+        }
+        
+        // Fallback
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: created_at) {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            return formatter.localizedString(for: date, relativeTo: Date())
+        }
+        
+        return "Just now"
+    }
+}
+
 // MARK: - User Data Manager
 
 class UserDataManager: ObservableObject {
@@ -109,6 +169,7 @@ class UserDataManager: ObservableObject {
     @Published var userProgress: UserProgress?
     @Published var dailyCompletions: [DailyCompletion] = []
     @Published var verseNotes: [VerseNote] = []
+    @Published var savedVerses: [SavedVerse] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var lastRefreshDate = Date() // Force UI updates
@@ -142,6 +203,7 @@ class UserDataManager: ObservableObject {
             async let progressTask = fetchProgress(userId: userId)
             async let completionsTask = fetchDailyCompletions(userId: userId)
             async let notesTask = fetchVerseNotes(userId: userId)
+            async let savedVersesTask = fetchSavedVerses(userId: userId)
             
             // Fetch profile (optional - app works without it)
             do {
@@ -179,6 +241,16 @@ class UserDataManager: ObservableObject {
                 print("✅ Verse notes: \(notes.count)")
             } catch {
                 print("⚠️ Notes fetch error: \(error.localizedDescription)")
+                // Keep existing data on error - don't clear
+            }
+            
+            // Fetch saved verses (optional)
+            do {
+                let verses = try await savedVersesTask
+                self.savedVerses = verses
+                print("✅ Saved verses: \(verses.count)")
+            } catch {
+                print("⚠️ Saved verses fetch error: \(error.localizedDescription)")
                 // Keep existing data on error - don't clear
             }
             
@@ -543,6 +615,97 @@ class UserDataManager: ObservableObject {
     func getNotesForVerse(book: Int, chapter: Int, verse: Int) -> [VerseNote] {
         return verseNotes.filter { note in
             note.book == book && note.chapter == chapter && note.verse == verse
+        }
+    }
+    
+    // MARK: - Saved Verses Methods
+    
+    private func fetchSavedVerses(userId: UUID) async throws -> [SavedVerse] {
+        print("💾 Fetching saved verses for user: \(userId)")
+        let response: [SavedVerse] = try await supabase
+            .from("saved_verses")
+            .select()
+            .eq("user_id", value: userId.uuidString)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+        
+        print("💾 Fetched \(response.count) saved verses")
+        return response
+    }
+    
+    @MainActor
+    func saveVerse(book: Int, chapter: Int, verse: Int, verseText: String, translation: String?) async throws {
+        let session = try await supabase.auth.session
+        let userId = session.user.id
+        
+        // Check if already saved
+        if isVerseSaved(book: book, chapter: chapter, verse: verse, translation: translation) {
+            print("⚠️ Verse already saved")
+            return
+        }
+        
+        struct VerseSaveInsert: Encodable {
+            let user_id: UUID
+            let book: Int
+            let chapter: Int
+            let verse: Int
+            let verse_text: String
+            let translation: String?
+        }
+        
+        let saveData = VerseSaveInsert(
+            user_id: userId,
+            book: book,
+            chapter: chapter,
+            verse: verse,
+            verse_text: verseText,
+            translation: translation
+        )
+        
+        let response: [SavedVerse] = try await supabase
+            .from("saved_verses")
+            .insert(saveData)
+            .select()
+            .execute()
+            .value
+        
+        // Add to local array
+        if let newSavedVerse = response.first {
+            savedVerses.insert(newSavedVerse, at: 0)
+        }
+        
+        print("✅ Saved verse: \(BibleManager.bookNames[book] ?? "Unknown") \(chapter):\(verse)")
+    }
+    
+    @MainActor
+    func unsaveVerse(book: Int, chapter: Int, verse: Int, translation: String?) async throws {
+        // Find the saved verse to delete
+        guard let savedVerse = savedVerses.first(where: { 
+            $0.book == book && $0.chapter == chapter && $0.verse == verse && $0.translation == translation 
+        }) else {
+            print("⚠️ Verse not found in saved verses")
+            return
+        }
+        
+        try await supabase
+            .from("saved_verses")
+            .delete()
+            .eq("id", value: savedVerse.id.uuidString)
+            .execute()
+        
+        // Remove from local array
+        savedVerses.removeAll { $0.id == savedVerse.id }
+        
+        print("✅ Unsaved verse: \(BibleManager.bookNames[book] ?? "Unknown") \(chapter):\(verse)")
+    }
+    
+    func isVerseSaved(book: Int, chapter: Int, verse: Int, translation: String?) -> Bool {
+        return savedVerses.contains { savedVerse in
+            savedVerse.book == book && 
+            savedVerse.chapter == chapter && 
+            savedVerse.verse == verse && 
+            savedVerse.translation == translation
         }
     }
 }

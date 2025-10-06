@@ -6,6 +6,7 @@ import Supabase
 struct HomeView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var userDataManager: UserDataManager
+    @EnvironmentObject var bibleNavigator: BibleNavigator
     @StateObject private var dailyLessonManager: DailyLessonManager
     @State private var showingProfile = false
     
@@ -38,7 +39,7 @@ struct HomeView: View {
                     
                     // Weekly Streak Section
                     WeeklyStreakView(userDataManager: userDataManager, showingProfile: $showingProfile)
-                        .padding(.horizontal, horizontalPadding)
+                        .padding(.horizontal, horizontalPadding + 16)
                         .zIndex(1) // Ensure it's above other content
                     
                     // Today Content Section
@@ -64,6 +65,7 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showingProfile) {
                 ProfileView(userDataManager: userDataManager)
                     .environmentObject(authManager)
+                    .environmentObject(bibleNavigator)
             }
             .toolbar(.hidden, for: .navigationBar)
         }

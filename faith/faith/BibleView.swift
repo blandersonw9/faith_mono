@@ -273,11 +273,20 @@ enum ReadingMode: String, CaseIterable {
                     .multilineTextAlignment(.leading)
                     .shadow(color: isSelected ? readingMode.shadowLight.opacity(0.5) : Color.clear, radius: 0.5, x: 0, y: 0.5)
                 
-                if !getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse).isEmpty {
-                    Image(systemName: "note.text")
-                        .font(.system(size: fontSize * 0.75, weight: .semibold))
-                        .foregroundColor(StyleGuide.gold.opacity(0.9))
-                        .padding(.top, 2)
+                HStack(spacing: 4) {
+                    if !getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse).isEmpty {
+                        Image(systemName: "note.text")
+                            .font(.system(size: fontSize * 0.75, weight: .semibold))
+                            .foregroundColor(StyleGuide.gold.opacity(0.9))
+                            .padding(.top, 2)
+                    }
+                    
+                    if userDataManager.isVerseSaved(book: verse.book, chapter: verse.chapter, verse: verse.verse, translation: bibleManager.currentTranslation.abbreviation) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: fontSize * 0.75, weight: .semibold))
+                            .foregroundColor(Color.red.opacity(0.8))
+                            .padding(.top, 2)
+                    }
                 }
             }
         }
@@ -645,6 +654,7 @@ enum ReadingMode: String, CaseIterable {
                         VerseActionMenu(
                             currentHighlightColor: verseHighlights[verse.id],
                             existingNotes: getNotesForVerse(book: verse.book, chapter: verse.chapter, verse: verse.verse),
+                            isSaved: userDataManager.isVerseSaved(book: verse.book, chapter: verse.chapter, verse: verse.verse, translation: bibleManager.currentTranslation.abbreviation),
                             copyAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                                 impactFeedback.impactOccurred()
@@ -688,9 +698,38 @@ enum ReadingMode: String, CaseIterable {
                             saveAction: {
                                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                 impactFeedback.impactOccurred()
-                                #if DEBUG
-                                print("Save verse: \(verse.book):\(verse.chapter):\(verse.verse)")
-                                #endif
+                                
+                                let isSaved = userDataManager.isVerseSaved(
+                                    book: verse.book, 
+                                    chapter: verse.chapter, 
+                                    verse: verse.verse, 
+                                    translation: bibleManager.currentTranslation.abbreviation
+                                )
+                                
+                                Task {
+                                    do {
+                                        if isSaved {
+                                            try await userDataManager.unsaveVerse(
+                                                book: verse.book,
+                                                chapter: verse.chapter,
+                                                verse: verse.verse,
+                                                translation: bibleManager.currentTranslation.abbreviation
+                                            )
+                                        } else {
+                                            let text = cleanBibleText(verse.text)
+                                            try await userDataManager.saveVerse(
+                                                book: verse.book,
+                                                chapter: verse.chapter,
+                                                verse: verse.verse,
+                                                verseText: text,
+                                                translation: bibleManager.currentTranslation.abbreviation
+                                            )
+                                        }
+                                    } catch {
+                                        print("❌ Error saving verse: \(error)")
+                                    }
+                                }
+                                
                                 withAnimation { showActionMenu = false }
                             },
                             noteAction: {
@@ -749,15 +788,23 @@ enum ReadingMode: String, CaseIterable {
             } // end ZStack
             .animation(.easeInOut(duration: 0.3), value: showNavigationArrows)
             .onChange(of: bibleManager.currentChapter) { _ in
+                print("📖 Chapter changed, targetVerse: \(targetVerse ?? -1)")
+                print("📖 Verses loaded: \(bibleManager.verses.count)")
                 // Scroll to target verse if set, otherwise scroll to top of chapter
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     if let v = targetVerse, let target = bibleManager.verses.first(where: { $0.verse == v }) {
+                        print("📖 Scrolling to verse \(v), found target with id: \(target.id)")
                         withAnimation(.easeOut(duration: 0.25)) {
                             scrollProxy.scrollTo(target.id, anchor: .top)
                         }
-                        targetVerse = nil // Clear target verse after scrolling
+                        // Clear target verse after scrolling completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            targetVerse = nil
+                            print("📖 Cleared targetVerse")
+                        }
                     } else if let firstVerse = bibleManager.verses.first {
                         // No target verse, scroll to first verse of chapter
+                        print("📖 No target verse, scrolling to first verse")
                         withAnimation(.easeOut(duration: 0.25)) {
                             scrollProxy.scrollTo(firstVerse.id, anchor: .top)
                         }
@@ -780,32 +827,38 @@ enum ReadingMode: String, CaseIterable {
         .animation(.easeInOut(duration: 0.4), value: readingMode)
         .animation(.easeInOut(duration: 0.3), value: showNavigationArrows)
         .onAppear {
-            print("📖 BibleView appeared")
+            print("📖 BibleView appeared, targetVerse: \(targetVerse ?? -1)")
             
             // Apply pending selection if any
             if let sel = bibleNavigator.pendingSelection {
+                print("📖 onAppear: Found pendingSelection, loading \(sel.book):\(sel.chapter):\(sel.verse ?? -1)")
                 targetVerse = sel.verse
                 bibleManager.loadVerses(book: sel.book, chapter: sel.chapter)
                 bibleNavigator.pendingSelection = nil
-            } else {
-                // Load saved position or default to Genesis 1
+            } else if bibleManager.verses.isEmpty {
+                // Only load saved position if no verses are loaded yet
+                print("📖 onAppear: No verses loaded, loading saved position")
                 let savedBook = UserDefaults.standard.integer(forKey: "savedBibleBook")
                 let savedChapter = UserDefaults.standard.integer(forKey: "savedBibleChapter")
                 let savedVerse = UserDefaults.standard.integer(forKey: "savedBibleVerse")
                 if savedBook > 0 && savedChapter > 0 {
                     targetVerse = savedVerse > 0 ? savedVerse : nil
                     bibleManager.loadVerses(book: savedBook, chapter: savedChapter)
-                } else if bibleManager.verses.isEmpty {
+                } else {
                     targetVerse = nil
                     bibleManager.loadVerses(book: 1, chapter: 1)
                 }
+            } else {
+                print("📖 onAppear: Verses already loaded, not reloading")
             }
             // Initialize notes cache
             updateNotesCache()
         }
         .onChange(of: bibleNavigator.pendingSelection) { newValue in
             guard let sel = newValue else { return }
+            print("📖 BibleView received pendingSelection: \(sel.book):\(sel.chapter):\(sel.verse ?? -1)")
             targetVerse = sel.verse
+            print("📖 Set targetVerse to: \(targetVerse ?? -1)")
             bibleManager.loadVerses(book: sel.book, chapter: sel.chapter)
             bibleNavigator.pendingSelection = nil
         }
@@ -1302,6 +1355,7 @@ private struct TranslationMenu: View {
 private struct VerseActionMenu: View {
     let currentHighlightColor: Color?
     let existingNotes: [VerseNote]
+    let isSaved: Bool
     let copyAction: () -> Void
     let interpretAction: () -> Void
     let shareAction: () -> Void
@@ -1371,8 +1425,8 @@ private struct VerseActionMenu: View {
             
             // Save verse button
             NeuromorphicMenuButton(
-                icon: "heart",
-                title: "Save verse",
+                icon: isSaved ? "heart.fill" : "heart",
+                title: isSaved ? "Unsave verse" : "Save verse",
                 action: saveAction
             )
             .opacity(buttonsVisible ? 1 : 0)
