@@ -91,6 +91,7 @@ struct OnboardingLoadingView: View {
     // MARK: - Supabase Save
     
     private struct OnboardingUpdate: Encodable {
+        let username: String
         let growth_goal: String
         let onboarding_completed_at: String
     }
@@ -106,24 +107,85 @@ struct OnboardingLoadingView: View {
         do {
             let userId = try await authManager.supabase.auth.session.user.id
             
+            // Generate unique username from first name
+            let username = await generateUniqueUsername()
+            
             // Create update object
             let update = OnboardingUpdate(
+                username: username,
                 growth_goal: growthGoal,
                 onboarding_completed_at: ISO8601DateFormatter().string(from: Date())
             )
             
-            // Update the user's profile with the growth goal and completion timestamp
+            // Update the user's profile with the username, growth goal and completion timestamp
             try await authManager.supabase
                 .from("profiles")
                 .update(update)
                 .eq("id", value: userId.uuidString)
                 .execute()
             
-            print("✅ Saved onboarding data to Supabase")
+            print("✅ Saved onboarding data to Supabase (username: \(username))")
         } catch {
             print("❌ Failed to save onboarding data to Supabase: \(error)")
             // Continue anyway - data is saved to UserDefaults as fallback
         }
+    }
+    
+    // MARK: - Username Generation
+    
+    private func generateUniqueUsername() async -> String {
+        // Get first name, clean it up for username
+        let firstName = (authManager.userFirstName ?? "Friend")
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+            .filter { $0.isLetter } // Keep only letters
+        
+        // Keep trying until we find a unique username
+        var attempts = 0
+        let maxAttempts = 10
+        
+        while attempts < maxAttempts {
+            // Generate random 4-digit suffix
+            let suffix = String(format: "%04d", Int.random(in: 0...9999))
+            let candidateUsername = "\(firstName)\(suffix)"
+            
+            // Check if username is available
+            if await isUsernameAvailable(candidateUsername) {
+                return candidateUsername
+            }
+            
+            attempts += 1
+        }
+        
+        // Fallback: use UUID suffix if we couldn't find a unique username
+        let uuidSuffix = UUID().uuidString.prefix(8).lowercased()
+        return "\(firstName)\(uuidSuffix)"
+    }
+    
+    private func isUsernameAvailable(_ username: String) async -> Bool {
+        do {
+            // Query profiles table to see if username exists
+            let response: [UserProfile] = try await authManager.supabase
+                .from("profiles")
+                .select()
+                .eq("username", value: username)
+                .execute()
+                .value
+            
+            // Username is available if no results found
+            return response.isEmpty
+        } catch {
+            print("❌ Error checking username availability: \(error)")
+            // On error, assume it's not available to be safe
+            return false
+        }
+    }
+    
+    // UserProfile struct for username checking
+    private struct UserProfile: Codable {
+        let id: UUID
+        let username: String
     }
     
     // MARK: - API Call

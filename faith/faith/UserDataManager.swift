@@ -329,11 +329,17 @@ class UserDataManager: ObservableObject {
     // MARK: - Helper Methods
     
     func getDisplayName() -> String {
-        // First try profile display_name, then authManager firstName, then UserDefaults, then default
+        // First try username from profile (generated during onboarding)
+        if let username = userProfile?.username, !username.isEmpty {
+            print("👤 Using profile username: \(username)")
+            return username
+        }
+        // Then try display_name
         if let displayName = userProfile?.display_name, !displayName.isEmpty {
             print("👤 Using profile display name: \(displayName)")
             return displayName
         }
+        // Then authManager firstName
         if let firstName = authManager?.userFirstName, !firstName.isEmpty {
             print("👤 Using authManager first name: \(firstName)")
             return firstName
@@ -343,12 +349,72 @@ class UserDataManager: ObservableObject {
             print("👤 Using saved first name from UserDefaults: \(savedFirstName)")
             return savedFirstName
         }
+        print("👤 Falling back to 'Friend' - no username or name found")
+        return "Friend"
+    }
+    
+    func getFirstName() -> String {
+        // Get first name for personalized greetings (used in HomeView)
+        if let firstName = authManager?.userFirstName, !firstName.isEmpty {
+            print("👤 Using authManager first name: \(firstName)")
+            return firstName
+        }
+        // Fallback to UserDefaults in case authManager reference is weak/nil
+        if let savedFirstName = UserDefaults.standard.string(forKey: "userFirstName"), !savedFirstName.isEmpty {
+            print("👤 Using saved first name from UserDefaults: \(savedFirstName)")
+            return savedFirstName
+        }
+        // Try display_name as fallback
+        if let displayName = userProfile?.display_name, !displayName.isEmpty {
+            print("👤 Using profile display name: \(displayName)")
+            return displayName
+        }
         print("👤 Falling back to 'Friend' - no first name found")
         return "Friend"
     }
     
     func getCurrentStreak() -> Int {
         return userProgress?.current_streak ?? 0
+    }
+    
+    // MARK: - Profile Update Methods
+    
+    func updateProfile(username: String, firstName: String) async throws {
+        let userId = try await supabase.auth.session.user.id
+        
+        struct ProfileUpdate: Encodable {
+            let username: String
+            let display_name: String
+        }
+        
+        let update = ProfileUpdate(username: username, display_name: firstName)
+        
+        try await supabase
+            .from("profiles")
+            .update(update)
+            .eq("id", value: userId.uuidString)
+            .execute()
+        
+        print("✅ Profile updated successfully")
+        
+        // Refresh user data to get updated profile
+        await fetchUserData()
+    }
+    
+    func isUsernameAvailable(_ username: String) async -> Bool {
+        do {
+            let response: [UserProfile] = try await supabase
+                .from("profiles")
+                .select()
+                .eq("username", value: username)
+                .execute()
+                .value
+            
+            return response.isEmpty
+        } catch {
+            print("❌ Error checking username availability: \(error)")
+            return false
+        }
     }
     
     func isDateCompleted(_ date: Date) -> Bool {

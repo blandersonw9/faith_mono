@@ -15,6 +15,7 @@ struct ProfileView: View {
     @State private var showCopiedFeedback = false
     @State private var showingEditNote = false
     @State private var selectedNote: VerseNote? = nil
+    @State private var showingEditProfile = false
     
     var body: some View {
         ZStack {
@@ -43,39 +44,53 @@ struct ProfileView: View {
                                 .foregroundColor(StyleGuide.gold)
                         }
                         
-                        // User Name with Copy Button
-                        Button(action: {
-                            let username = userDataManager.getDisplayName()
-                            UIPasteboard.general.string = username
-                            
-                            // Show feedback
-                            withAnimation {
-                                showCopiedFeedback = true
-                            }
-                            
-                            // Hide after 2 seconds
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        // User Name with Copy and Edit Buttons
+                        HStack(spacing: 12) {
+                            // Copy button
+                            Button(action: {
+                                let username = userDataManager.getDisplayName()
+                                UIPasteboard.general.string = username
+                                
+                                // Show feedback
                                 withAnimation {
-                                    showCopiedFeedback = false
+                                    showCopiedFeedback = true
+                                }
+                                
+                                // Hide after 2 seconds
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation {
+                                        showCopiedFeedback = false
+                                    }
+                                }
+                                
+                                // Haptic feedback
+                                let generator = UINotificationFeedbackGenerator()
+                                generator.notificationOccurred(.success)
+                            }) {
+                                HStack(spacing: 8) {
+                                    Text(userDataManager.getDisplayName())
+                                        .font(StyleGuide.merriweather(size: 28, weight: .bold))
+                                        .foregroundColor(StyleGuide.mainBrown)
+                                    
+                                    Image(systemName: showCopiedFeedback ? "checkmark.circle.fill" : "doc.on.doc")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(showCopiedFeedback ? .green : StyleGuide.mainBrown.opacity(0.5))
+                                        .offset(y: -6)
                                 }
                             }
+                            .buttonStyle(PlainButtonStyle())
                             
-                            // Haptic feedback
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                        }) {
-                            HStack(spacing: 8) {
-                                Text(userDataManager.getDisplayName())
-                                    .font(StyleGuide.merriweather(size: 28, weight: .bold))
-                                    .foregroundColor(StyleGuide.mainBrown)
-                                
-                                Image(systemName: showCopiedFeedback ? "checkmark.circle.fill" : "doc.on.doc")
+                            // Edit button
+                            Button(action: {
+                                showingEditProfile = true
+                            }) {
+                                Image(systemName: "pencil")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(showCopiedFeedback ? .green : StyleGuide.mainBrown.opacity(0.5))
+                                    .foregroundColor(StyleGuide.gold)
                                     .offset(y: -6)
                             }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .buttonStyle(PlainButtonStyle())
                         
                         // User Stats
                         HStack(spacing: StyleGuide.spacing.xl) {
@@ -584,7 +599,9 @@ struct ProfileView: View {
                         .padding(.horizontal, StyleGuide.spacing.lg)
                     }
                     
+                    // Bottom spacing to ensure content isn't cut off
                     Spacer()
+                        .frame(height: 100)
                 }
             }
         }
@@ -622,6 +639,12 @@ struct ProfileView: View {
         .onChange(of: showingEditNote) { newValue in
             print("🔔 showingEditNote changed to: \(newValue)")
             print("   selectedNote: \(selectedNote?.verseReference ?? "nil")")
+        }
+        .sheet(isPresented: $showingEditProfile) {
+            EditProfileView(
+                userDataManager: userDataManager,
+                authManager: authManager
+            )
         }
         .onAppear {
             print("👤 ProfileView appeared - refreshing data")
@@ -776,6 +799,338 @@ struct BadgeItem: View {
         }
         .frame(maxWidth: .infinity)
         .opacity(isEarned ? 1.0 : 0.6)
+    }
+}
+
+// MARK: - Edit Profile View
+struct EditProfileView: View {
+    @ObservedObject var userDataManager: UserDataManager
+    @ObservedObject var authManager: AuthManager
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var firstName: String = ""
+    @State private var username: String = ""
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String? = nil
+    @State private var showingSuccess: Bool = false
+    @State private var usernameError: String? = nil
+    @State private var isCheckingUsername: Bool = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background
+                StyleGuide.backgroundBeige
+                    .ignoresSafeArea(.all)
+                
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(spacing: StyleGuide.spacing.xl) {
+                            Spacer()
+                                .frame(height: 32)
+                            
+                            profileIcon
+                            fieldsCard
+                            statusMessages
+                            
+                            Spacer()
+                                .frame(height: 100)
+                        }
+                    }
+                    
+                    saveButtonSection
+                }
+            }
+            .navigationTitle("Edit Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(StyleGuide.mainBrown)
+                }
+            }
+            .onAppear {
+                firstName = authManager.userFirstName ?? ""
+                username = userDataManager.userProfile?.username ?? ""
+            }
+        }
+    }
+    
+    // MARK: - View Components
+    
+    private var profileIcon: some View {
+        ZStack {
+            Circle()
+                .fill(StyleGuide.gold.opacity(0.2))
+                .frame(width: 80, height: 80)
+            
+            Image(systemName: "person.fill")
+                .font(.system(size: 36, weight: .medium))
+                .foregroundColor(StyleGuide.gold)
+        }
+    }
+    
+    private var fieldsCard: some View {
+        VStack(spacing: StyleGuide.spacing.xl) {
+            firstNameField
+            
+            Rectangle()
+                .fill(StyleGuide.mainBrown.opacity(0.1))
+                .frame(height: 1)
+                .padding(.vertical, 4)
+            
+            usernameField
+        }
+        .padding(StyleGuide.spacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.white.opacity(0.7))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(StyleGuide.gold.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 3)
+        .padding(.horizontal, StyleGuide.spacing.xl)
+    }
+    
+    private var firstNameField: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("First Name")
+                .font(StyleGuide.merriweather(size: 13, weight: .semibold))
+                .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                .textCase(.uppercase)
+                .tracking(0.5)
+            
+            TextField("Enter your first name", text: $firstName)
+                .font(StyleGuide.merriweather(size: 17, weight: .regular))
+                .foregroundColor(StyleGuide.mainBrown)
+                .padding(StyleGuide.spacing.md + 2)
+                .background(Color.white)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(StyleGuide.gold.opacity(0.3), lineWidth: 1.5)
+                )
+            
+            Text("This is how we'll greet you in the app")
+                .font(StyleGuide.merriweather(size: 12, weight: .regular))
+                .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                .padding(.leading, 2)
+        }
+    }
+    
+    private var usernameField: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Username")
+                .font(StyleGuide.merriweather(size: 13, weight: .semibold))
+                .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                .textCase(.uppercase)
+                .tracking(0.5)
+            
+            usernameInput
+            usernameHelperText
+        }
+    }
+    
+    private var usernameInput: some View {
+        HStack(spacing: 12) {
+            TextField("Enter your username", text: $username)
+                .font(StyleGuide.merriweather(size: 17, weight: .regular))
+                .foregroundColor(StyleGuide.mainBrown)
+                .autocapitalization(.none)
+                .onChange(of: username) { newValue in
+                    username = newValue.lowercased()
+                        .filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
+                    
+                    Task {
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        await checkUsernameAvailability()
+                    }
+                }
+            
+            usernameStatusIcon
+        }
+        .padding(StyleGuide.spacing.md + 2)
+        .background(Color.white)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(usernameError != nil ? Color.red.opacity(0.6) : StyleGuide.gold.opacity(0.3), lineWidth: 1.5)
+        )
+    }
+    
+    @ViewBuilder
+    private var usernameStatusIcon: some View {
+        Group {
+            if isCheckingUsername {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: StyleGuide.gold))
+                    .scaleEffect(0.9)
+            } else if usernameError != nil {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.red.opacity(0.8))
+            } else if !username.isEmpty && username != (userDataManager.userProfile?.username ?? "") {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.green)
+            }
+        }
+        .frame(width: 24, height: 24)
+    }
+    
+    @ViewBuilder
+    private var usernameHelperText: some View {
+        if let error = usernameError {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 12))
+                Text(error)
+                    .font(StyleGuide.merriweather(size: 12, weight: .medium))
+            }
+            .foregroundColor(.red.opacity(0.8))
+            .padding(.leading, 2)
+        } else {
+            Text("Your unique identifier for connecting with friends")
+                .font(StyleGuide.merriweather(size: 12, weight: .regular))
+                .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                .padding(.leading, 2)
+        }
+    }
+    
+    @ViewBuilder
+    private var statusMessages: some View {
+        if let error = errorMessage {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(error)
+                    .font(StyleGuide.merriweather(size: 14, weight: .medium))
+            }
+            .foregroundColor(.red.opacity(0.8))
+            .padding(StyleGuide.spacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.red.opacity(0.1))
+            )
+            .padding(.horizontal, StyleGuide.spacing.xl)
+        }
+        
+        if showingSuccess {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                Text("Profile updated successfully!")
+                    .font(StyleGuide.merriweather(size: 14, weight: .medium))
+            }
+            .foregroundColor(.green)
+            .padding(StyleGuide.spacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.green.opacity(0.1))
+            )
+            .padding(.horizontal, StyleGuide.spacing.xl)
+        }
+    }
+    
+    private var saveButtonSection: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    StyleGuide.backgroundBeige.opacity(0),
+                    StyleGuide.backgroundBeige
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 20)
+            
+            Button(action: {
+                Task {
+                    await saveProfile()
+                }
+            }) {
+                if isSaving {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Text("Saving...")
+                    }
+                } else {
+                    Text("Save Changes")
+                }
+            }
+            .primaryButtonStyle()
+            .disabled(isSaving || usernameError != nil || firstName.isEmpty || username.isEmpty)
+            .opacity((isSaving || usernameError != nil || firstName.isEmpty || username.isEmpty) ? 0.5 : 1.0)
+            .padding(.horizontal, StyleGuide.spacing.xl)
+            .padding(.bottom, StyleGuide.spacing.xl)
+            .background(StyleGuide.backgroundBeige)
+        }
+    }
+    
+    private func checkUsernameAvailability() async {
+        guard !username.isEmpty else {
+            usernameError = nil
+            return
+        }
+        
+        // Don't check if it's the user's current username
+        if username == userDataManager.userProfile?.username {
+            usernameError = nil
+            return
+        }
+        
+        // Basic validation
+        if username.count < 3 {
+            usernameError = "Username must be at least 3 characters"
+            return
+        }
+        
+        isCheckingUsername = true
+        usernameError = nil
+        
+        // Check if username is available
+        let isAvailable = await userDataManager.isUsernameAvailable(username)
+        
+        await MainActor.run {
+            isCheckingUsername = false
+            if !isAvailable {
+                usernameError = "Username is already taken"
+            }
+        }
+    }
+    
+    private func saveProfile() async {
+        isSaving = true
+        errorMessage = nil
+        showingSuccess = false
+        
+        do {
+            // Update first name
+            authManager.userFirstName = firstName
+            UserDefaults.standard.set(firstName, forKey: "userFirstName")
+            
+            // Update username in database
+            try await userDataManager.updateProfile(username: username, firstName: firstName)
+            
+            await MainActor.run {
+                isSaving = false
+                showingSuccess = true
+                
+                // Dismiss after brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    dismiss()
+                }
+            }
+        } catch {
+            await MainActor.run {
+                isSaving = false
+                errorMessage = "Failed to update profile. Please try again."
+                print("❌ Error updating profile: \(error)")
+            }
+        }
     }
 }
 

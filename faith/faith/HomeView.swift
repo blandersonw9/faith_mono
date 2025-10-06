@@ -239,7 +239,7 @@ struct WeeklyStreakView: View {
                             showingProfile = true
                         }) {
                     HStack(spacing: 4) {
-                        Text(userDataManager.getDisplayName())
+                        Text(userDataManager.getFirstName())
                             .font(StyleGuide.merriweather(size: 16, weight: .semibold))
                             .foregroundColor(StyleGuide.mainBrown)
                         

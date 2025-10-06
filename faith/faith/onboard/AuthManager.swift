@@ -177,7 +177,8 @@ class AuthManager: ObservableObject {
         
         do {
             // Configure Google Sign-In
-            guard let presentingViewController = await UIApplication.shared.windows.first?.rootViewController else {
+            guard let scene = await UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let presentingViewController = scene.windows.first?.rootViewController else {
                 throw AuthError.noPresentingViewController
             }
             
@@ -354,6 +355,10 @@ class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAut
     }
     
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        return UIApplication.shared.windows.first!
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            fatalError("Unable to get window for Apple Sign-In presentation")
+        }
+        return window
     }
 }
