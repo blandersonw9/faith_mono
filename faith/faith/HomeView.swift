@@ -1,6 +1,244 @@
 import SwiftUI
 import Supabase
 
+// MARK: - Progress Cross View
+struct ProgressCrossView: View {
+    @ObservedObject var userDataManager: UserDataManager
+    
+    private var currentStreak: Int {
+        userDataManager.getCurrentStreak()
+    }
+    
+    private func nextBadge(for streak: Int) -> StreakBadge? {
+        StreakBadge.allBadges.first(where: { $0.daysRequired > streak })
+    }
+    
+    private func progressToNext(for streak: Int) -> Double {
+        guard let next = nextBadge(for: streak) else {
+            return 1.0 // All badges earned
+        }
+        
+        let previousMilestone = StreakBadge.allBadges
+            .filter { $0.daysRequired <= streak }
+            .last?.daysRequired ?? 0
+        
+        let range = Double(next.daysRequired - previousMilestone)
+        let progress = Double(streak - previousMilestone)
+        
+        return min(progress / range, 1.0)
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                // Background cross (outline)
+                Image("faithCrossOutline")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                // Filled cross (progress) - masked from bottom up with wavy top
+                Image("faithCrossFilled")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .mask(
+                        GeometryReader { geo in
+                            VStack(spacing: 0) {
+                                Spacer()
+                                ZStack(alignment: .bottom) {
+                                    // Main fill rectangle
+                                    Rectangle()
+                                        .frame(height: geo.size.height * progressToNext(for: currentStreak))
+                                    
+                                    // Wavy top edge (only show if not at 0% or 100%)
+                                    if progressToNext(for: currentStreak) > 0.01 && progressToNext(for: currentStreak) < 0.99 {
+                                        WavyEdge()
+                                            .fill(Color.white)
+                                            .frame(height: 40)
+                                            .offset(y: -geo.size.height * progressToNext(for: currentStreak) + 20)
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    .animation(.easeInOut(duration: 0.5), value: progressToNext(for: currentStreak))
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+    }
+}
+
+// MARK: - Badge Progress Sheet
+struct BadgeProgressSheet: View {
+    let currentStreak: Int
+    let nextBadge: StreakBadge?
+    let progress: Double
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                StyleGuide.backgroundBeige
+                    .ignoresSafeArea()
+                
+                VStack(spacing: StyleGuide.spacing.xl) {
+                    Spacer()
+                        .frame(height: 20)
+                    
+                    if let next = nextBadge {
+                        // Next badge preview
+                        Image("\(next.assetName)Unfilled")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 150, height: 150)
+                            .opacity(0.8)
+                        
+                        // Badge name
+                        Text(next.name)
+                            .font(StyleGuide.merriweather(size: 28, weight: .bold))
+                            .foregroundColor(StyleGuide.mainBrown)
+                        
+                        // Days remaining
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "flame.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(StyleGuide.gold)
+                                
+                                Text("\(next.daysRequired - currentStreak)")
+                                    .font(StyleGuide.merriweather(size: 48, weight: .bold))
+                                    .foregroundColor(StyleGuide.gold)
+                            }
+                            
+                            Text(next.daysRequired - currentStreak == 1 ? "day to go" : "days to go")
+                                .font(StyleGuide.merriweather(size: 16, weight: .medium))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                        }
+                        .padding(.vertical, StyleGuide.spacing.lg)
+                        .padding(.horizontal, StyleGuide.spacing.xl)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(StyleGuide.gold.opacity(0.1))
+                        )
+                        
+                        // Progress percentage
+                        VStack(spacing: 8) {
+                            HStack {
+                                Text("Progress")
+                                    .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                                
+                                Spacer()
+                                
+                                Text("\(Int(progress * 100))%")
+                                    .font(StyleGuide.merriweather(size: 14, weight: .bold))
+                                    .foregroundColor(StyleGuide.gold)
+                            }
+                            
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(StyleGuide.mainBrown.opacity(0.1))
+                                        .frame(height: 12)
+                                    
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [StyleGuide.gold, StyleGuide.gold.opacity(0.7)],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .frame(width: geo.size.width * progress, height: 12)
+                                }
+                            }
+                            .frame(height: 12)
+                        }
+                        .padding(.horizontal, StyleGuide.spacing.xl)
+                        
+                        // Description
+                        Text(next.description)
+                            .font(StyleGuide.merriweather(size: 15, weight: .medium))
+                            .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, StyleGuide.spacing.xl)
+                        
+                    } else {
+                        // All badges earned
+                        Image("badgeYear")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 150, height: 150)
+                        
+                        Text("All Badges Earned! 🎉")
+                            .font(StyleGuide.merriweather(size: 28, weight: .bold))
+                            .foregroundColor(StyleGuide.gold)
+                        
+                        Text("You've completed all streak milestones!")
+                            .font(StyleGuide.merriweather(size: 15, weight: .medium))
+                            .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, StyleGuide.spacing.xl)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Badge Progress")
+                        .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                        .foregroundColor(StyleGuide.mainBrown)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(StyleGuide.mainBrown)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Wavy Edge Shape
+struct WavyEdge: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        
+        let width = rect.width
+        let height = rect.height
+        
+        // Start from bottom left
+        path.move(to: CGPoint(x: 0, y: height))
+        
+        // Draw wavy top edge - more pronounced waves
+        let waveCount = 4.0
+        let waveWidth = width / waveCount
+        let waveAmplitude = height // Full height for more pronounced waves
+        
+        for i in 0..<Int(waveCount) {
+            let startX = CGFloat(i) * waveWidth
+            let endX = startX + waveWidth
+            
+            // Create pronounced wave with control points
+            path.addCurve(
+                to: CGPoint(x: endX, y: height),
+                control1: CGPoint(x: startX + waveWidth * 0.25, y: 0),
+                control2: CGPoint(x: startX + waveWidth * 0.75, y: 0)
+            )
+        }
+        
+        // Complete the shape
+        path.addLine(to: CGPoint(x: width, y: height))
+        path.closeSubpath()
+        
+        return path
+    }
+}
 
 // MARK: - Tab Content Views
 struct HomeView: View {
@@ -9,6 +247,7 @@ struct HomeView: View {
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @EnvironmentObject var dailyLessonManager: DailyLessonManager
     @State private var showingProfile = false
+    @State private var showBadgeProgress = false
     
     var body: some View {
         NavigationStack {
@@ -21,21 +260,22 @@ struct HomeView: View {
                     Spacer()
                         .frame(height: 40)
                     
-                    // Header with cross background
-                    ZStack(alignment: .top) {
-                        // Cross - 220px height with proper spacing
-                        Image("crossFill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 220)
-                            .foregroundColor(StyleGuide.gold)
-                    }
-                    .padding(.bottom, -80) // Negative padding to pull content up without offset
+                    // Header with progress-filled cross
+                    ProgressCrossView(userDataManager: userDataManager)
+                        .frame(height: 220)
+                        .padding(.bottom, -80) // Negative padding to pull content up without offset
+                        .onTapGesture {
+                            print("🎯 Cross tapped!")
+                            showBadgeProgress = true
+                            let generator = UIImpactFeedbackGenerator(style: .light)
+                            generator.impactOccurred()
+                        }
+                        .zIndex(-1) // Behind the weekly view
                     
                     // Weekly Streak Section
                     WeeklyStreakView(userDataManager: userDataManager, showingProfile: $showingProfile)
                         .padding(.horizontal, horizontalPadding + 16)
-                        .zIndex(1) // Ensure it's above other content
+                        .zIndex(1) // Above the cross
                     
                     // Today Content Section
                     TodayContent()
@@ -56,6 +296,22 @@ struct HomeView: View {
                     // Allow manual refresh of both
                     await userDataManager.fetchUserData()
                     await dailyLessonManager.fetchTodaysLesson()
+                }
+                .sheet(isPresented: $showBadgeProgress) {
+                    BadgeProgressSheet(
+                        currentStreak: userDataManager.getCurrentStreak(),
+                        nextBadge: StreakBadge.allBadges.first(where: { $0.daysRequired > userDataManager.getCurrentStreak() }),
+                        progress: {
+                            let streak = userDataManager.getCurrentStreak()
+                            guard let next = StreakBadge.allBadges.first(where: { $0.daysRequired > streak }) else {
+                                return 1.0
+                            }
+                            let previousMilestone = StreakBadge.allBadges.filter { $0.daysRequired <= streak }.last?.daysRequired ?? 0
+                            let range = Double(next.daysRequired - previousMilestone)
+                            let progress = Double(streak - previousMilestone)
+                            return min(progress / range, 1.0)
+                        }()
+                    )
                 }
             }
             .navigationDestination(isPresented: $showingProfile) {
@@ -229,10 +485,10 @@ struct WeeklyStreakView: View {
         VStack(spacing: 16) {
             // First row: NAME -------- Streak
             HStack {
-                        // Username button - navigates to profile
-                        Button(action: {
-                            showingProfile = true
-                        }) {
+                // Username button - navigates to profile
+                Button(action: {
+                    showingProfile = true
+                }) {
                     HStack(spacing: 4) {
                         Text(userDataManager.getFirstName())
                             .font(StyleGuide.merriweather(size: 16, weight: .semibold))

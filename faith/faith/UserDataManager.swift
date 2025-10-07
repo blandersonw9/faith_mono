@@ -774,5 +774,67 @@ class UserDataManager: ObservableObject {
             savedVerse.translation == translation
         }
     }
+    
+    // MARK: - Account Deletion
+    
+    @MainActor
+    func deleteAccount() async throws {
+        print("🗑️ Starting account deletion process...")
+        
+        let session = try await supabase.auth.session
+        let userId = session.user.id
+        
+        // Delete all user data in order
+        // 1. Delete saved verses
+        try await supabase
+            .from("saved_verses")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+        print("✅ Deleted saved verses")
+        
+        // 2. Delete verse notes
+        try await supabase
+            .from("verse_notes")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+        print("✅ Deleted verse notes")
+        
+        // 3. Delete daily completions
+        try await supabase
+            .from("daily_completions")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+        print("✅ Deleted daily completions")
+        
+        // 4. Delete user progress
+        try await supabase
+            .from("user_progress")
+            .delete()
+            .eq("user_id", value: userId.uuidString)
+            .execute()
+        print("✅ Deleted user progress")
+        
+        // 5. Delete profile
+        try await supabase
+            .from("profiles")
+            .delete()
+            .eq("id", value: userId.uuidString)
+            .execute()
+        print("✅ Deleted profile")
+        
+        // Clear local data
+        await MainActor.run {
+            self.userProfile = nil
+            self.userProgress = nil
+            self.dailyCompletions = []
+            self.verseNotes = []
+            self.savedVerses = []
+        }
+        
+        print("✅ Account data deleted successfully")
+    }
 }
 

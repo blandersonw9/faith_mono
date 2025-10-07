@@ -25,6 +25,10 @@ struct ProfileView: View {
     @State private var celebratingBadge: StreakBadge? = nil
     @State private var showBadgeDetail: StreakBadge? = nil
     
+    // Delete account confirmation
+    @State private var showDeleteConfirmation = false
+    @State private var isDeletingAccount = false
+    
     private var displayStreak: Int {
         debugStreakOverride ?? userDataManager.getCurrentStreak()
     }
@@ -740,6 +744,37 @@ struct ProfileView: View {
                                 .background(StyleGuide.backgroundBeige)
                             }
                             .buttonStyle(PlainButtonStyle())
+                            
+                            // Divider
+                            Rectangle()
+                                .fill(StyleGuide.mainBrown.opacity(0.1))
+                                .frame(height: 1)
+                                .padding(.horizontal, StyleGuide.spacing.lg)
+                            
+                            // Delete Account Button
+                            Button(action: {
+                                showDeleteConfirmation = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.red.opacity(0.7))
+                                    
+                                    Text("Delete Account")
+                                        .font(StyleGuide.merriweather(size: 16, weight: .medium))
+                                        .foregroundColor(.red)
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.red.opacity(0.3))
+                                }
+                                .padding(.horizontal, StyleGuide.spacing.lg)
+                                .padding(.vertical, StyleGuide.spacing.md)
+                                .background(StyleGuide.backgroundBeige)
+                            }
+                            .buttonStyle(PlainButtonStyle())
                         }
                         .cornerRadius(12)
                         .shadow(color: StyleGuide.shadows.sm, radius: 4, x: 0, y: 2)
@@ -807,6 +842,63 @@ struct ProfileView: View {
                     celebratingBadge = nil
                 }
             )
+        }
+        .alert("Delete Account", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task {
+                    await deleteAccount()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete your account? This action cannot be undone. All your data, including notes, saved verses, and progress will be permanently deleted.")
+        }
+        .overlay {
+            if isDeletingAccount {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+                        
+                        Text("Deleting account...")
+                            .font(StyleGuide.merriweather(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    .padding(32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(StyleGuide.mainBrown)
+                    )
+                }
+            }
+        }
+    }
+    
+    // MARK: - Delete Account
+    private func deleteAccount() async {
+        isDeletingAccount = true
+        
+        do {
+            // Delete user data from database
+            try await userDataManager.deleteAccount()
+            
+            // Sign out and delete auth account
+            await authManager.deleteAccount()
+            
+            await MainActor.run {
+                isDeletingAccount = false
+            }
+        } catch {
+            await MainActor.run {
+                isDeletingAccount = false
+                print("❌ Error deleting account: \(error)")
+                // Show error to user
+                // You might want to add an error state here
+            }
         }
     }
 }

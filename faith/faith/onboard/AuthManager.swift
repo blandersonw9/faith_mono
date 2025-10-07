@@ -278,6 +278,34 @@ class AuthManager: ObservableObject {
         isLoading = false
     }
     
+    // MARK: - Delete Account
+    @MainActor
+    func deleteAccount() async {
+        print("🗑️ Deleting auth account...")
+        
+        do {
+            // Sign out from Supabase (this also clears the session)
+            try await supabase.auth.signOut()
+            
+            // Clear local state
+            self.isAuthenticated = false
+            self.user = nil
+            self.userFirstName = nil
+            
+            // Clear all saved data
+            UserDefaults.standard.removeObject(forKey: "userFirstName")
+            UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+            UserDefaults.standard.removeObject(forKey: "onboardingGratitude")
+            
+            print("✅ Auth account deleted and signed out")
+        } catch {
+            print("❌ Error deleting auth account: \(error)")
+            // Even if there's an error, ensure we're signed out
+            self.isAuthenticated = false
+            self.user = nil
+        }
+    }
+    
 }
 
 // MARK: - Apple Sign-In Coordinator
