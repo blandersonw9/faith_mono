@@ -17,6 +17,38 @@ struct ProfileView: View {
     @State private var selectedNote: VerseNote? = nil
     @State private var showingEditProfile = false
     
+    // DEBUG: Test streak values
+    @State private var debugStreakOverride: Int? = nil
+    @State private var showDebugControls = false
+    
+    // Badge celebration
+    @State private var celebratingBadge: StreakBadge? = nil
+    @State private var showBadgeDetail: StreakBadge? = nil
+    
+    private var displayStreak: Int {
+        debugStreakOverride ?? userDataManager.getCurrentStreak()
+    }
+    
+    private func nextBadge(for currentStreak: Int) -> StreakBadge? {
+        StreakBadge.allBadges.first(where: { $0.daysRequired > currentStreak })
+    }
+    
+    private func progressToNext(for currentStreak: Int) -> Double {
+        guard let next = nextBadge(for: currentStreak) else {
+            return 1.0 // All badges earned
+        }
+        
+        // Find the previous badge milestone
+        let previousMilestone = StreakBadge.allBadges
+            .filter { $0.daysRequired <= currentStreak }
+            .last?.daysRequired ?? 0
+        
+        let range = Double(next.daysRequired - previousMilestone)
+        let progress = Double(currentStreak - previousMilestone)
+        
+        return min(progress / range, 1.0)
+    }
+    
     var body: some View {
         ZStack {
             // Background
@@ -101,14 +133,19 @@ struct ProfileView: View {
                                         .aspectRatio(contentMode: .fit)
                                         .frame(width: 24, height: 24)
                                     
-                                    Text("\(userDataManager.getCurrentStreak())")
+                                    Text("\(displayStreak)")
                                         .font(StyleGuide.merriweather(size: 24, weight: .bold))
-                                        .foregroundColor(StyleGuide.gold)
+                                        .foregroundColor(debugStreakOverride != nil ? .orange : StyleGuide.gold)
                                 }
                                 
                                 Text("Day Streak")
                                     .font(StyleGuide.merriweather(size: 12, weight: .regular))
                                     .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                            }
+                            .onLongPressGesture {
+                                withAnimation {
+                                    showDebugControls.toggle()
+                                }
                             }
                             
                             Rectangle()
@@ -133,30 +170,140 @@ struct ProfileView: View {
                     .shadow(color: StyleGuide.shadows.md, radius: 8, x: 0, y: 4)
                     .padding(.horizontal, StyleGuide.spacing.lg)
                     
+                    // DEBUG Controls
+                    if showDebugControls {
+                        VStack(spacing: StyleGuide.spacing.md) {
+                            HStack {
+                                Text("🧪 Debug: Test Streak")
+                                    .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                    .foregroundColor(.orange)
+                                    .textCase(.uppercase)
+                                
+                                Spacer()
+                                
+                                Button(action: {
+                                    debugStreakOverride = nil
+                                }) {
+                                    Text("Reset")
+                                        .font(StyleGuide.merriweather(size: 12, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(StyleGuide.gold)
+                                        .cornerRadius(8)
+                                }
+                            }
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                            
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text("Streak: \(debugStreakOverride ?? userDataManager.getCurrentStreak())")
+                                        .font(StyleGuide.merriweather(size: 16, weight: .bold))
+                                        .foregroundColor(StyleGuide.mainBrown)
+                                    
+                                    Spacer()
+                                }
+                                
+                                Stepper(value: Binding(
+                                    get: { debugStreakOverride ?? userDataManager.getCurrentStreak() },
+                                    set: { debugStreakOverride = $0 }
+                                ), in: 0...400) {
+                                    EmptyView()
+                                }
+                                
+                                // Quick test buttons
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach([0, 2, 7, 14, 30, 60, 100, 200, 365], id: \.self) { days in
+                                            Button(action: {
+                                                debugStreakOverride = days
+                                            }) {
+                                                Text("\(days)")
+                                                    .font(StyleGuide.merriweather(size: 12, weight: .semibold))
+                                                    .foregroundColor(debugStreakOverride == days ? .white : StyleGuide.mainBrown)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 6)
+                                                    .background(debugStreakOverride == days ? .orange : Color.white.opacity(0.5))
+                                                    .cornerRadius(8)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, StyleGuide.spacing.lg)
+                                }
+                                
+                                // Test celebration button
+                                Button(action: {
+                                    if let badge = StreakBadge.allBadges.first(where: { $0.daysRequired <= displayStreak }) {
+                                        celebratingBadge = badge
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "party.popper.fill")
+                                            .font(.system(size: 14, weight: .medium))
+                                        
+                                        Text("Test Badge Celebration")
+                                            .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(StyleGuide.gold)
+                                    .cornerRadius(8)
+                                }
+                                .padding(.horizontal, StyleGuide.spacing.lg)
+                                .padding(.top, 8)
+                            }
+                            .padding(StyleGuide.spacing.md)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(12)
+                            .padding(.horizontal, StyleGuide.spacing.lg)
+                        }
+                    }
+                    
                     // Badges Section
                     VStack(spacing: StyleGuide.spacing.md) {
                         HStack {
-                            Text("Badges")
+                            Text("Streak Badges")
                                 .font(StyleGuide.merriweather(size: 14, weight: .semibold))
                                 .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
                                 .textCase(.uppercase)
                             
                             Spacer()
+                            
+                            // Badge count
+                            let earnedCount = StreakBadge.allBadges.filter { displayStreak >= $0.daysRequired }.count
+                            Text("\(earnedCount)/\(StreakBadge.allBadges.count)")
+                                .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                                .foregroundColor(StyleGuide.gold)
                         }
                         .padding(.horizontal, StyleGuide.spacing.lg)
                         
                         // Badge Grid
+                        let currentStreak = displayStreak
+                        let nextBadge = nextBadge(for: currentStreak)
+                        
                         LazyVGrid(columns: [
                             GridItem(.flexible(), spacing: 12),
                             GridItem(.flexible(), spacing: 12),
                             GridItem(.flexible(), spacing: 12),
                             GridItem(.flexible(), spacing: 12)
-                        ], spacing: 12) {
-                            // Example badges
-                            BadgeItem(icon: "star.fill", title: "First Step", color: StyleGuide.gold, isEarned: true)
-                            BadgeItem(icon: "flame.fill", title: "7 Day", color: .orange, isEarned: false)
-                            BadgeItem(icon: "book.fill", title: "Scholar", color: .blue, isEarned: false)
-                            BadgeItem(icon: "heart.fill", title: "Devoted", color: .red, isEarned: false)
+                        ], spacing: 16) {
+                            ForEach(StreakBadge.allBadges) { badge in
+                                Button(action: {
+                                    showBadgeDetail = badge
+                                    let generator = UIImpactFeedbackGenerator(style: .light)
+                                    generator.impactOccurred()
+                                }) {
+                                    BadgeItemWithProgress(
+                                        badge: badge,
+                                        isEarned: currentStreak >= badge.daysRequired,
+                                        currentStreak: currentStreak,
+                                        isNextBadge: nextBadge?.id == badge.id,
+                                        progress: nextBadge?.id == badge.id ? progressToNext(for: currentStreak) : 0
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
                         }
                         .padding(.horizontal, StyleGuide.spacing.lg)
                     }
@@ -646,6 +793,21 @@ struct ProfileView: View {
                 authManager: authManager
             )
         }
+        .sheet(item: $showBadgeDetail) { badge in
+            BadgeDetailView(
+                badge: badge,
+                isEarned: displayStreak >= badge.daysRequired,
+                currentStreak: displayStreak
+            )
+        }
+        .fullScreenCover(item: $celebratingBadge) { badge in
+            BadgeCelebrationView(
+                badge: badge,
+                onDismiss: {
+                    celebratingBadge = nil
+                }
+            )
+        }
     }
 }
 
@@ -765,33 +927,421 @@ struct NoteEditorFromProfileView: View {
     }
 }
 
+// MARK: - Badge Configuration
+struct StreakBadge: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let daysRequired: Int
+    let assetName: String // Base name without "Unfilled" suffix
+    let description: String
+    let celebrationMessage: String
+    
+    static let allBadges: [StreakBadge] = [
+        StreakBadge(
+            name: "Spark",
+            daysRequired: 2,
+            assetName: "badgeSpark",
+            description: "Your faith journey begins with a spark",
+            celebrationMessage: "You've kindled your first spark! Two days of consistent devotion."
+        ),
+        StreakBadge(
+            name: "Ember",
+            daysRequired: 7,
+            assetName: "badgeEmber",
+            description: "A full week of dedication",
+            celebrationMessage: "The ember glows! Seven days of faithful commitment."
+        ),
+        StreakBadge(
+            name: "Flame",
+            daysRequired: 14,
+            assetName: "badgeFlame",
+            description: "Two weeks of unwavering devotion",
+            celebrationMessage: "Your flame burns bright! Fourteen days of spiritual growth."
+        ),
+        StreakBadge(
+            name: "Lantern",
+            daysRequired: 30,
+            assetName: "badgeLantern",
+            description: "A full month lighting your path",
+            celebrationMessage: "Your lantern shines! Thirty days of steadfast faith."
+        ),
+        StreakBadge(
+            name: "Beacon",
+            daysRequired: 60,
+            assetName: "badgeBeacon",
+            description: "Two months guiding others",
+            celebrationMessage: "You're a beacon of light! Sixty days of inspiration."
+        ),
+        StreakBadge(
+            name: "Lighthouse",
+            daysRequired: 100,
+            assetName: "badgeLighthouse",
+            description: "A hundred days standing strong",
+            celebrationMessage: "Standing tall like a lighthouse! One hundred days of devotion."
+        ),
+        StreakBadge(
+            name: "Steadfast",
+            daysRequired: 200,
+            assetName: "badgeSteadfast",
+            description: "Unwavering for two hundred days",
+            celebrationMessage: "Steadfast and true! Two hundred days of faithful dedication."
+        ),
+        StreakBadge(
+            name: "Year of Light",
+            daysRequired: 365,
+            assetName: "badgeYear",
+            description: "A full year of daily devotion",
+            celebrationMessage: "A complete Year of Light! 365 days of unwavering faith. You are an inspiration!"
+        )
+    ]
+}
+
 // MARK: - Badge Item
 struct BadgeItem: View {
-    let icon: String
-    let title: String
-    let color: Color
+    let badge: StreakBadge
     let isEarned: Bool
+    let currentStreak: Int
     
     var body: some View {
         VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(isEarned ? color.opacity(0.15) : StyleGuide.mainBrown.opacity(0.05))
-                    .frame(width: 60, height: 60)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundColor(isEarned ? color : StyleGuide.mainBrown.opacity(0.3))
-            }
+            // Badge Image
+            Image(isEarned ? badge.assetName : "\(badge.assetName)Unfilled")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 70, height: 70)
+                .opacity(isEarned ? 1.0 : 0.5)
             
-            Text(title)
+            // Badge Title
+            Text(badge.name)
                 .font(StyleGuide.merriweather(size: 10, weight: .medium))
                 .foregroundColor(isEarned ? StyleGuide.mainBrown : StyleGuide.mainBrown.opacity(0.4))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            // Days Required
+            Text(isEarned ? "✓ \(badge.daysRequired)" : "\(badge.daysRequired) days")
+                .font(StyleGuide.merriweather(size: 8, weight: isEarned ? .semibold : .regular))
+                .foregroundColor(isEarned ? StyleGuide.gold : StyleGuide.mainBrown.opacity(0.4))
         }
         .frame(maxWidth: .infinity)
-        .opacity(isEarned ? 1.0 : 0.6)
+    }
+}
+
+// MARK: - Badge Item with Progress Ring
+struct BadgeItemWithProgress: View {
+    let badge: StreakBadge
+    let isEarned: Bool
+    let currentStreak: Int
+    let isNextBadge: Bool
+    let progress: Double
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            // Badge Image with Progress Ring
+            ZStack {
+                // Progress ring (only show for next badge)
+                if isNextBadge && !isEarned {
+                    Circle()
+                        .stroke(StyleGuide.mainBrown.opacity(0.1), lineWidth: 3)
+                        .frame(width: 78, height: 78)
+                    
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(
+                            LinearGradient(
+                                colors: [StyleGuide.gold, StyleGuide.gold.opacity(0.6)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .frame(width: 78, height: 78)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeInOut(duration: 0.5), value: progress)
+                }
+                
+                // Badge Image
+                Image(isEarned ? badge.assetName : "\(badge.assetName)Unfilled")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 70, height: 70)
+                    .opacity(isEarned ? 1.0 : (isNextBadge ? 0.8 : 0.5))
+                    .shadow(
+                        color: isEarned ? StyleGuide.gold.opacity(0.4) : .clear,
+                        radius: isEarned ? 8 : 0,
+                        x: 0,
+                        y: isEarned ? 4 : 0
+                    )
+            }
+            .scaleEffect(isEarned ? 1.05 : 1.0)
+            
+            // Badge Title
+            Text(badge.name)
+                .font(StyleGuide.merriweather(size: 10, weight: isEarned ? .semibold : .medium))
+                .foregroundColor(isEarned ? StyleGuide.mainBrown : (isNextBadge ? StyleGuide.mainBrown.opacity(0.7) : StyleGuide.mainBrown.opacity(0.4)))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            // Days Required / Progress
+            if isNextBadge && !isEarned {
+                Text("\(currentStreak)/\(badge.daysRequired)")
+                    .font(StyleGuide.merriweather(size: 8, weight: .semibold))
+                    .foregroundColor(StyleGuide.gold)
+            } else {
+                Text(isEarned ? "✓ \(badge.daysRequired)" : "\(badge.daysRequired) days")
+                    .font(StyleGuide.merriweather(size: 8, weight: isEarned ? .semibold : .regular))
+                    .foregroundColor(isEarned ? StyleGuide.gold : StyleGuide.mainBrown.opacity(0.4))
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Badge Detail View
+struct BadgeDetailView: View {
+    let badge: StreakBadge
+    let isEarned: Bool
+    let currentStreak: Int
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                StyleGuide.backgroundBeige
+                    .ignoresSafeArea()
+                
+                VStack(spacing: StyleGuide.spacing.xl) {
+                    Spacer()
+                        .frame(height: 40)
+                    
+                    // Badge Image
+                    Image(isEarned ? badge.assetName : "\(badge.assetName)Unfilled")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 200, height: 200)
+                        .opacity(isEarned ? 1.0 : 0.5)
+                    
+                    // Badge Name
+                    Text(badge.name)
+                        .font(StyleGuide.merriweather(size: 32, weight: .bold))
+                        .foregroundColor(StyleGuide.mainBrown)
+                    
+                    // Status
+                    if isEarned {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.green)
+                            
+                            Text("Earned")
+                                .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                                .foregroundColor(.green)
+                        }
+                    } else {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                                
+                                Text("Locked")
+                                    .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                                    .foregroundColor(StyleGuide.mainBrown.opacity(0.5))
+                            }
+                            
+                            Text("\(badge.daysRequired - currentStreak) days to go")
+                                .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                        }
+                    }
+                    
+                    // Description
+                    VStack(spacing: 12) {
+                        Text(badge.description)
+                            .font(StyleGuide.merriweather(size: 16, weight: .medium))
+                            .foregroundColor(StyleGuide.mainBrown.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, StyleGuide.spacing.xl)
+                        
+                        // Requirement
+                        HStack(spacing: 8) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(StyleGuide.gold)
+                            
+                            Text("\(badge.daysRequired) day streak required")
+                                .font(StyleGuide.merriweather(size: 14, weight: .medium))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.7))
+                        }
+                        .padding(.horizontal, StyleGuide.spacing.lg)
+                        .padding(.vertical, StyleGuide.spacing.md)
+                        .background(StyleGuide.gold.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(StyleGuide.mainBrown)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Badge Celebration View
+struct BadgeCelebrationView: View {
+    let badge: StreakBadge
+    let onDismiss: () -> Void
+    
+    @State private var scale: CGFloat = 0.5
+    @State private var opacity: Double = 0
+    @State private var showConfetti = false
+    
+    var body: some View {
+        ZStack {
+            // Background
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+            
+            // Confetti
+            if showConfetti {
+                ConfettiView()
+            }
+            
+            VStack(spacing: StyleGuide.spacing.xl) {
+                Spacer()
+                
+                // Badge Earned!
+                Text("Badge Earned!")
+                    .font(StyleGuide.merriweather(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                    .opacity(opacity)
+                
+                // Badge Image with animation
+                Image(badge.assetName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 220, height: 220)
+                    .scaleEffect(scale)
+                    .opacity(opacity)
+                
+                // Badge Name
+                Text(badge.name)
+                    .font(StyleGuide.merriweather(size: 36, weight: .bold))
+                    .foregroundColor(StyleGuide.gold)
+                    .opacity(opacity)
+                
+                // Celebration Message
+                Text(badge.celebrationMessage)
+                    .font(StyleGuide.merriweather(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, StyleGuide.spacing.xl)
+                    .opacity(opacity)
+                
+                Spacer()
+                
+                // Continue Button
+                Button(action: onDismiss) {
+                    Text("Continue")
+                        .font(StyleGuide.merriweather(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(StyleGuide.gold)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal, StyleGuide.spacing.xl)
+                .padding(.bottom, StyleGuide.spacing.xl)
+                .opacity(opacity)
+            }
+        }
+        .onAppear {
+            // Haptic feedback
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            
+            // Animations
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
+                scale = 1.0
+            }
+            
+            withAnimation(.easeIn(duration: 0.3)) {
+                opacity = 1.0
+            }
+            
+            // Show confetti after a slight delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                showConfetti = true
+            }
+        }
+    }
+}
+
+// MARK: - Confetti View
+struct ConfettiView: View {
+    @State private var animate = false
+    
+    var body: some View {
+        ZStack {
+            ForEach(0..<50, id: \.self) { index in
+                ConfettiPiece(index: index)
+            }
+        }
+        .onAppear {
+            animate = true
+        }
+    }
+}
+
+struct ConfettiPiece: View {
+    let index: Int
+    @State private var position: CGPoint = .zero
+    @State private var opacity: Double = 1
+    
+    private let colors: [Color] = [
+        StyleGuide.gold,
+        .orange,
+        .red,
+        .pink,
+        .purple,
+        .blue,
+        .green,
+        .yellow
+    ]
+    
+    var body: some View {
+        Circle()
+            .fill(colors[index % colors.count])
+            .frame(width: CGFloat.random(in: 8...16), height: CGFloat.random(in: 8...16))
+            .position(position)
+            .opacity(opacity)
+            .onAppear {
+                let startX = CGFloat.random(in: 0...UIScreen.main.bounds.width)
+                let startY = CGFloat.random(in: -100...0)
+                position = CGPoint(x: startX, y: startY)
+                
+                // Animate downward
+                withAnimation(
+                    .easeIn(duration: Double.random(in: 2...4))
+                    .delay(Double.random(in: 0...0.5))
+                ) {
+                    position = CGPoint(
+                        x: startX + CGFloat.random(in: -100...100),
+                        y: UIScreen.main.bounds.height + 100
+                    )
+                    opacity = 0
+                }
+            }
     }
 }
 
