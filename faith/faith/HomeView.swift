@@ -7,13 +7,8 @@ struct HomeView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var userDataManager: UserDataManager
     @EnvironmentObject var bibleNavigator: BibleNavigator
-    @StateObject private var dailyLessonManager: DailyLessonManager
+    @EnvironmentObject var dailyLessonManager: DailyLessonManager
     @State private var showingProfile = false
-    
-    init() {
-        let auth = AuthManager()
-        _dailyLessonManager = StateObject(wrappedValue: DailyLessonManager(supabase: auth.supabase))
-    }
     
     var body: some View {
         NavigationStack {
@@ -43,7 +38,7 @@ struct HomeView: View {
                         .zIndex(1) // Ensure it's above other content
                     
                     // Today Content Section
-                    TodayContent(dailyLessonManager: dailyLessonManager, userDataManager: userDataManager)
+                    TodayContent()
                         .padding(.horizontal, horizontalPadding)
                     
                     // Bottom spacing for better scrolling
@@ -52,12 +47,13 @@ struct HomeView: View {
                 }
                 }
                 .onAppear {
+                    // Only fetch lesson - user data is already loaded by faithApp
                     Task {
-                        await userDataManager.fetchUserData()
                         await dailyLessonManager.fetchTodaysLesson()
                     }
                 }
                 .refreshable {
+                    // Allow manual refresh of both
                     await userDataManager.fetchUserData()
                     await dailyLessonManager.fetchTodaysLesson()
                 }
@@ -75,8 +71,8 @@ struct HomeView: View {
 
 // MARK: - Today Content
 struct TodayContent: View {
-    @ObservedObject var dailyLessonManager: DailyLessonManager
-    @ObservedObject var userDataManager: UserDataManager
+    @EnvironmentObject var dailyLessonManager: DailyLessonManager
+    @EnvironmentObject var userDataManager: UserDataManager
     @State private var showLesson: Bool = false
     
     // Get today's date formatted
@@ -212,10 +208,9 @@ struct TodayContent: View {
                 .ignoresSafeArea()
         }
         .onChange(of: showLesson) { isShowing in
-            // Refresh data when returning from lesson
+            // Refresh only lesson data when returning - user data refresh handled by ContentView scenePhase
             if !isShowing {
                 Task {
-                    await userDataManager.fetchUserData()
                     await dailyLessonManager.fetchTodaysLesson()
                 }
             }

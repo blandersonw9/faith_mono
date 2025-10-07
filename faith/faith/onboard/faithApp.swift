@@ -10,16 +10,19 @@ import UIKit
 
 @main
 struct faithApp: App {
-    @StateObject private var authManager = AuthManager()
-    @StateObject private var bibleNavigator = BibleNavigator()
+    @StateObject private var authManager: AuthManager
+    @StateObject private var bibleNavigator: BibleNavigator
     @StateObject private var userDataManager: UserDataManager
+    @StateObject private var dailyLessonManager: DailyLessonManager
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     init() {
+        // Create a single instance of AuthManager and reuse it
         let auth = AuthManager()
         _authManager = StateObject(wrappedValue: auth)
         _bibleNavigator = StateObject(wrappedValue: BibleNavigator())
         _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: auth.supabase, authManager: auth))
+        _dailyLessonManager = StateObject(wrappedValue: DailyLessonManager(supabase: auth.supabase))
     }
     
     var body: some Scene {
@@ -35,6 +38,7 @@ struct faithApp: App {
                             .environmentObject(authManager)
                             .environmentObject(bibleNavigator)
                             .environmentObject(userDataManager)
+                            .environmentObject(dailyLessonManager)
                             .task {
                                 print("📱 Showing: ContentView - Loading user data")
                                 // Fetch user data when authenticated
@@ -46,6 +50,7 @@ struct faithApp: App {
                             .environmentObject(authManager)
                             .environmentObject(bibleNavigator)
                             .environmentObject(userDataManager)
+                            .environmentObject(dailyLessonManager)
                             .onAppear { print("📱 Showing: OnboardingFlowView") }
                             .transition(.opacity)
                     }

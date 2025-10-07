@@ -178,6 +178,7 @@ class UserDataManager: ObservableObject {
     nonisolated(unsafe) private let supabase: SupabaseClient
     private var cancellables = Set<AnyCancellable>()
     weak var authManager: AuthManager?
+    private var isFetchingData = false // Prevent duplicate concurrent fetches
     
     init(supabase: SupabaseClient, authManager: AuthManager? = nil) {
         self.supabase = supabase
@@ -188,7 +189,14 @@ class UserDataManager: ObservableObject {
     
     @MainActor
     func fetchUserData() async {
+        // Prevent duplicate concurrent fetches
+        guard !isFetchingData else {
+            print("⚠️ fetchUserData already in progress, skipping duplicate request")
+            return
+        }
+        
         print("🔄 Starting fetchUserData...")
+        isFetchingData = true
         isLoading = true
         errorMessage = nil
         
@@ -273,6 +281,7 @@ class UserDataManager: ObservableObject {
         }
         
         isLoading = false
+        isFetchingData = false
         print("🔄 Finished fetchUserData")
     }
     
@@ -331,45 +340,36 @@ class UserDataManager: ObservableObject {
     func getDisplayName() -> String {
         // First try username from profile (generated during onboarding)
         if let username = userProfile?.username, !username.isEmpty {
-            print("👤 Using profile username: \(username)")
             return username
         }
         // Then try display_name
         if let displayName = userProfile?.display_name, !displayName.isEmpty {
-            print("👤 Using profile display name: \(displayName)")
             return displayName
         }
         // Then authManager firstName
         if let firstName = authManager?.userFirstName, !firstName.isEmpty {
-            print("👤 Using authManager first name: \(firstName)")
             return firstName
         }
         // Fallback to UserDefaults in case authManager reference is weak/nil
         if let savedFirstName = UserDefaults.standard.string(forKey: "userFirstName"), !savedFirstName.isEmpty {
-            print("👤 Using saved first name from UserDefaults: \(savedFirstName)")
             return savedFirstName
         }
-        print("👤 Falling back to 'Friend' - no username or name found")
         return "Friend"
     }
     
     func getFirstName() -> String {
         // Get first name for personalized greetings (used in HomeView)
         if let firstName = authManager?.userFirstName, !firstName.isEmpty {
-            print("👤 Using authManager first name: \(firstName)")
             return firstName
         }
         // Fallback to UserDefaults in case authManager reference is weak/nil
         if let savedFirstName = UserDefaults.standard.string(forKey: "userFirstName"), !savedFirstName.isEmpty {
-            print("👤 Using saved first name from UserDefaults: \(savedFirstName)")
             return savedFirstName
         }
         // Try display_name as fallback
         if let displayName = userProfile?.display_name, !displayName.isEmpty {
-            print("👤 Using profile display name: \(displayName)")
             return displayName
         }
-        print("👤 Falling back to 'Friend' - no first name found")
         return "Friend"
     }
     

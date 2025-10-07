@@ -646,13 +646,6 @@ struct ProfileView: View {
                 authManager: authManager
             )
         }
-        .onAppear {
-            print("👤 ProfileView appeared - refreshing data")
-            // Refresh user data to get latest notes and stats
-            Task {
-                await userDataManager.fetchUserData()
-            }
-        }
     }
 }
 
