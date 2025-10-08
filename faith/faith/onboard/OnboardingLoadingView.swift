@@ -75,6 +75,7 @@ struct OnboardingLoadingView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             // Start pulsing animation

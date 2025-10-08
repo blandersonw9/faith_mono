@@ -66,9 +66,11 @@ struct LoginView: View {
                 }
                 .padding(.horizontal, StyleGuide.spacing.lg)
             }
-            .background(Color.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.white.ignoresSafeArea())
             .navigationBarHidden(true)
         }
+        .navigationViewStyle(.stack)
     }
 }
 

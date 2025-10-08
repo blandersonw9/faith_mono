@@ -102,6 +102,7 @@ struct OnboardingGrowthView: View {
                 .padding(.horizontal, StyleGuide.spacing.xl)
                 .padding(.bottom, StyleGuide.spacing.xl)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
     

@@ -127,6 +127,8 @@ struct CustomTabView: View {
     @Binding var showingChat: Bool
     var bottomInset: CGFloat = 0
     private let barHeight: CGFloat = 72
+    @State private var homeButtonCenter: CGFloat = 0
+    @State private var bibleButtonCenter: CGFloat = 0
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -154,6 +156,14 @@ struct CustomTabView: View {
                 ) {
                     selectedTab = 0
                 }
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ButtonCenterPreferenceKey.self,
+                            value: ["home": geo.frame(in: .named("tabBar")).midX]
+                        )
+                    }
+                )
                 
                 Spacer()
                     .frame(maxWidth: 80)
@@ -167,6 +177,14 @@ struct CustomTabView: View {
                 ) {
                     selectedTab = 1
                 }
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: ButtonCenterPreferenceKey.self,
+                            value: ["bible": geo.frame(in: .named("tabBar")).midX]
+                        )
+                    }
+                )
                 
                 Spacer()
                 
@@ -182,27 +200,44 @@ struct CustomTabView: View {
                     .frame(maxWidth: 20)
             }
             .padding(.horizontal, StyleGuide.spacing.lg)
-            
-            // Animated pill indicator below icons
-            HStack(spacing: 0) {
-                Spacer()
-                    .frame(maxWidth: 40)
-                
-                Capsule()
-                    .fill(StyleGuide.mainBrown)
-                    .frame(width: 40, height: 2.5)
-                    .offset(x: selectedTab == 0 ? 20 : 180)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: selectedTab)
-                
-                Spacer()
+            .onPreferenceChange(ButtonCenterPreferenceKey.self) { preferences in
+                if let home = preferences["home"] {
+                    homeButtonCenter = home
+                }
+                if let bible = preferences["bible"] {
+                    bibleButtonCenter = bible
+                }
             }
-            .padding(.horizontal, StyleGuide.spacing.lg)
-            .padding(.top, 42)
+            
+            // Animated pill indicator below icons - responsive positioning
+            if homeButtonCenter > 0 && bibleButtonCenter > 0 {
+                HStack(spacing: 0) {
+                    Capsule()
+                        .fill(StyleGuide.mainBrown)
+                        .frame(width: 40, height: 2.5)
+                        .position(
+                            x: selectedTab == 0 ? homeButtonCenter : bibleButtonCenter,
+                            y: 42 + 1.25
+                        )
+                        .animation(.spring(response: 0.5, dampingFraction: 0.7, blendDuration: 0), value: selectedTab)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
         }
+        .coordinateSpace(name: "tabBar")
         .frame(height: barHeight + max(0, bottomInset))
         .ignoresSafeArea(edges: .bottom)
         .shadow(color: StyleGuide.mainBrown.opacity(0.25), radius: 4, x: 0, y: 0)
         
+    }
+}
+
+// MARK: - Preference Key for Button Positions
+struct ButtonCenterPreferenceKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+    
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue()) { $1 }
     }
 }
 

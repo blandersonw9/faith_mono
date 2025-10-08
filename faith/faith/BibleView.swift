@@ -904,10 +904,10 @@ enum ReadingMode: String, CaseIterable {
             }
         }
         .sheet(isPresented: $showingBookPicker) {
-            BookPickerView(bibleManager: bibleManager)
+            BookPickerView(bibleManager: bibleManager, readingMode: readingMode)
         }
         .sheet(isPresented: $showingChapterPicker) {
-            ChapterPickerView(bibleManager: bibleManager)
+            ChapterPickerView(bibleManager: bibleManager, readingMode: readingMode)
         }
         .sheet(isPresented: $showingAddNote) {
             if let verse = noteVerseForEdit {
@@ -940,6 +940,7 @@ enum ReadingMode: String, CaseIterable {
 /// Presents a collapsible list of Bible books with a chapter grid for selection.
 struct BookPickerView: View {
     @ObservedObject var bibleManager: BibleManager
+    let readingMode: ReadingMode
     @Environment(\.dismiss) var dismiss
     @State private var expandedBook: Int? = nil
     
@@ -962,13 +963,13 @@ struct BookPickerView: View {
                             HStack {
                                 Text(book.name)
                                     .font(StyleGuide.merriweather(size: 16, weight: .medium))
-                                    .foregroundColor(StyleGuide.mainBrown)
+                                    .foregroundColor(readingMode.textColor)
                                 
                                 Spacer()
                                 
                                 Image(systemName: expandedBook == book.id ? "chevron.up" : "chevron.down")
                                     .font(.system(size: 12))
-                                    .foregroundColor(StyleGuide.mainBrown)
+                                    .foregroundColor(readingMode.textColor)
                             }
                             .padding(.horizontal, StyleGuide.spacing.lg)
                             .padding(.vertical, StyleGuide.spacing.md)
@@ -997,41 +998,20 @@ struct BookPickerView: View {
                                                 }) {
                                                     Text("\(chapter)")
                                                         .font(StyleGuide.merriweather(size: 14, weight: .medium))
-                                                        .foregroundColor(StyleGuide.mainBrown)
+                                                        .foregroundColor(readingMode.textColor)
                                                         .frame(maxWidth: .infinity)
                                                         .frame(height: 44)
                                                         .background(
                                                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                                .fill(
-                                                                    LinearGradient(
-                                                                        colors: [
-                                                                            StyleGuide.backgroundBeige.opacity(0.9),
-                                                                            StyleGuide.backgroundBeige.opacity(0.95)
-                                                                        ],
-                                                                        startPoint: .topLeading,
-                                                                        endPoint: .bottomTrailing
-                                                                    )
-                                                                )
+                                                                .fill(readingMode.cardBackground)
                                                         )
                                                         .overlay(
                                                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                                .stroke(
-                                                                    LinearGradient(
-                                                                        colors: [
-                                                                            Color.white.opacity(0.3),
-                                                                            StyleGuide.mainBrown.opacity(0.08)
-                                                                        ],
-                                                                        startPoint: .topLeading,
-                                                                        endPoint: .bottomTrailing
-                                                                    ),
-                                                                    lineWidth: 0.8
-                                                                )
+                                                                .stroke(readingMode.textColor.opacity(0.15), lineWidth: 0.8)
                                                         )
                                                         .cornerRadius(10)
-                                                        // Light shadow (highlight)
-                                                        .shadow(color: Color.white.opacity(0.8), radius: 2, x: -2, y: -2)
-                                                        // Dark shadow (depth)
-                                                        .shadow(color: Color.black.opacity(0.08), radius: 3, x: 2, y: 2)
+                                                        .shadow(color: readingMode.shadowLight, radius: 2, x: -2, y: -2)
+                                                        .shadow(color: readingMode.shadowDark, radius: 3, x: 2, y: 2)
                                                 }
                                                 .buttonStyle(PlainButtonStyle())
                                             } else {
@@ -1050,13 +1030,14 @@ struct BookPickerView: View {
                     // Divider between books
                     if book.id != bibleManager.getAvailableBooks().last?.id {
                         Rectangle()
-                            .fill(StyleGuide.mainBrown.opacity(0.1))
+                            .fill(readingMode.textColor.opacity(0.1))
                             .frame(height: 1)
                             .padding(.horizontal, StyleGuide.spacing.lg)
                     }
                 }
                 }
             }
+            .background(readingMode.backgroundColor.ignoresSafeArea())
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1064,9 +1045,11 @@ struct BookPickerView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(readingMode.textColor)
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
 }
 
@@ -1074,6 +1057,7 @@ struct BookPickerView: View {
 /// Shows a grid of chapters for the currently selected book.
 struct ChapterPickerView: View {
     @ObservedObject var bibleManager: BibleManager
+    let readingMode: ReadingMode
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -1083,7 +1067,7 @@ struct ChapterPickerView: View {
                     // Current book name
                     Text(BibleManager.bookNames[bibleManager.currentBook] ?? "Select Book")
                         .font(StyleGuide.merriweather(size: 20, weight: .bold))
-                        .foregroundColor(StyleGuide.mainBrown)
+                        .foregroundColor(readingMode.textColor)
                         .padding(.top, StyleGuide.spacing.lg)
                     
                     // Chapter grid
@@ -1098,6 +1082,7 @@ struct ChapterPickerView: View {
                                         ChapterButton(
                                             chapter: chapter,
                                             isCurrentChapter: chapter == bibleManager.currentChapter,
+                                            readingMode: readingMode,
                                             action: {
                                                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                                 impactFeedback.impactOccurred()
@@ -1117,6 +1102,7 @@ struct ChapterPickerView: View {
                     .padding(.bottom, StyleGuide.spacing.lg)
                 }
             }
+            .background(readingMode.backgroundColor.ignoresSafeArea())
             .navigationTitle("Select Chapter")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1124,9 +1110,11 @@ struct ChapterPickerView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(readingMode.textColor)
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
 }
 
@@ -1135,13 +1123,14 @@ struct ChapterPickerView: View {
 private struct ChapterButton: View {
     let chapter: Int
     let isCurrentChapter: Bool
+    let readingMode: ReadingMode
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
             Text("\(chapter)")
                 .font(StyleGuide.merriweather(size: 14, weight: isCurrentChapter ? .bold : .medium))
-                .foregroundColor(isCurrentChapter ? Color.white : StyleGuide.mainBrown)
+                .foregroundColor(isCurrentChapter ? readingMode.backgroundColor : readingMode.textColor)
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(chapterBackground)
@@ -1162,8 +1151,8 @@ private struct ChapterButton: View {
         if isCurrentChapter {
             return LinearGradient(
                 colors: [
-                    StyleGuide.mainBrown,
-                    StyleGuide.mainBrown.opacity(0.85)
+                    readingMode.textColor,
+                    readingMode.textColor.opacity(0.85)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -1171,8 +1160,8 @@ private struct ChapterButton: View {
         } else {
             return LinearGradient(
                 colors: [
-                    StyleGuide.backgroundBeige.opacity(0.9),
-                    StyleGuide.backgroundBeige.opacity(0.95)
+                    readingMode.cardBackground,
+                    readingMode.cardBackground
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -1195,8 +1184,8 @@ private struct ChapterButton: View {
         } else {
             return LinearGradient(
                 colors: [
-                    Color.white.opacity(0.3),
-                    StyleGuide.mainBrown.opacity(0.08)
+                    readingMode.shadowLight.opacity(0.3),
+                    readingMode.textColor.opacity(0.08)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -1205,7 +1194,7 @@ private struct ChapterButton: View {
     }
     
     private var lightShadowColor: Color {
-        isCurrentChapter ? StyleGuide.mainBrown.opacity(0.3) : Color.white.opacity(0.8)
+        isCurrentChapter ? readingMode.textColor.opacity(0.3) : readingMode.shadowLight
     }
     
     private var darkShadowColor: Color {
@@ -1238,7 +1227,19 @@ private struct TranslationMenu: View {
             
             VStack(spacing: 8) {
                 ForEach(BibleTranslation.translations, id: \.id) { translation in
+                    let isAvailable = translation.isAvailable // Cache the availability check
+                    let isSelected = bibleManager.currentTranslation.id == translation.id
+                    
                     Button(action: {
+                        #if DEBUG
+                        print("🖱️ Translation button tapped: \(translation.abbreviation), isAvailable: \(isAvailable)")
+                        #endif
+                        guard isAvailable else {
+                            #if DEBUG
+                            print("⚠️ Translation not available, returning")
+                            #endif
+                            return
+                        }
                         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
                         impactFeedback.impactOccurred()
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -1252,18 +1253,18 @@ private struct TranslationMenu: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(translation.abbreviation)
-                                    .font(StyleGuide.merriweather(size: 15, weight: bibleManager.currentTranslation.id == translation.id ? .bold : .semibold))
-                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor : readingMode.textColor.opacity(0.6))
+                                    .font(StyleGuide.merriweather(size: 15, weight: isSelected ? .bold : .semibold))
+                                    .foregroundColor(isAvailable ? (isSelected ? readingMode.textColor : readingMode.textColor.opacity(0.6)) : readingMode.textColor.opacity(0.3))
                                 
                                 Text(translation.name)
                                     .font(StyleGuide.merriweather(size: 11, weight: .regular))
-                                    .foregroundColor(bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.7) : readingMode.textColor.opacity(0.4))
+                                    .foregroundColor(isAvailable ? (isSelected ? readingMode.textColor.opacity(0.7) : readingMode.textColor.opacity(0.4)) : readingMode.textColor.opacity(0.25))
                                     .lineLimit(1)
                             }
                             
                             Spacer()
                             
-                            if bibleManager.currentTranslation.id == translation.id {
+                            if isSelected {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundColor(readingMode.textColor)
@@ -1272,81 +1273,37 @@ private struct TranslationMenu: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .padding(.horizontal, 12)
+                        .contentShape(Rectangle()) // Make entire area tappable
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(bibleManager.currentTranslation.id == translation.id ? readingMode.cardBackground : Color.clear)
+                                .fill(isSelected ? readingMode.cardBackground : Color.clear)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(
-                                    bibleManager.currentTranslation.id == translation.id ? readingMode.textColor.opacity(0.2) : readingMode.textColor.opacity(0.08),
-                                    lineWidth: bibleManager.currentTranslation.id == translation.id ? 1.2 : 0.8
+                                    isSelected ? readingMode.textColor.opacity(0.2) : readingMode.textColor.opacity(0.08),
+                                    lineWidth: isSelected ? 1.2 : 0.8
                                 )
                         )
-                        .shadow(color: bibleManager.currentTranslation.id == translation.id ? readingMode.shadowDark.opacity(0.1) : Color.clear, radius: 3, x: 0, y: 2)
+                        .shadow(color: isSelected ? readingMode.shadowDark.opacity(0.1) : Color.clear, radius: 3, x: 0, y: 2)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .allowsHitTesting(isAvailable) // Only allow taps if available
                 }
             }
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
         .background(
-            ZStack {
-                // Glassmorphic background with blur
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                
-                // Subtle gradient overlay for depth (more transparent)
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.white.opacity(0.1),
-                                Color.white.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                
-                // Light refraction effect at the top
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .center
-                        )
-                    )
-            }
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(readingMode.cardBackground)
         )
         .overlay(
-            // Glass border with subtle shimmer
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.8),
-                            Color.white.opacity(0.3),
-                            readingMode.textColor.opacity(0.1),
-                            Color.white.opacity(0.3)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
+                .stroke(readingMode.textColor.opacity(0.15), lineWidth: 1)
         )
-        // Soft outer glow for floating glass effect
-        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
-        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
-        // Subtle highlight on top edge
-        .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
+        .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
     }
 }
 
@@ -1592,61 +1549,15 @@ private struct VerseActionMenu: View {
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
         .background(
-            ZStack {
-                // Glassmorphic background with blur
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                
-                // Subtle gradient overlay for depth (more transparent)
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.white.opacity(0.1),
-                                Color.white.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                
-                // Light refraction effect at the top
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .center
-                        )
-                    )
-            }
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(StyleGuide.backgroundBeige)
         )
         .overlay(
-            // Glass border with subtle shimmer
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.8),
-                            Color.white.opacity(0.3),
-                            StyleGuide.mainBrown.opacity(0.1),
-                            Color.white.opacity(0.3)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
+                .stroke(StyleGuide.mainBrown.opacity(0.15), lineWidth: 1)
         )
-        // Soft outer glow for floating glass effect
-        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
-        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
-        // Subtle highlight on top edge
-        .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
+        .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
         .frame(width: 230)
     }
 }
@@ -1908,61 +1819,15 @@ private struct ReadingSettingsMenu: View {
         .padding(.vertical, 16)
         .padding(.horizontal, 18)
         .background(
-            ZStack {
-                // Glassmorphic background with blur
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                
-                // Subtle gradient overlay for depth (more transparent)
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.white.opacity(0.1),
-                                Color.white.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                
-                // Light refraction effect at the top
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .center
-                        )
-                    )
-            }
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(readingMode.cardBackground)
         )
         .overlay(
-            // Glass border with subtle shimmer
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.8),
-                            Color.white.opacity(0.3),
-                            readingMode.textColor.opacity(0.1),
-                            Color.white.opacity(0.3)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
+                .stroke(readingMode.textColor.opacity(0.15), lineWidth: 1)
         )
-        // Soft outer glow for floating glass effect
-        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
-        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
-        // Subtle highlight on top edge
-        .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
+        .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
     }
 }
 
@@ -2395,58 +2260,15 @@ private struct ChapterNavigationBar: View {
                     .foregroundColor(canGoPrevious ? readingMode.textColor : readingMode.textColor.opacity(0.3))
                     .frame(width: 44, height: 44)
                     .background(
-                        ZStack {
-                            // Glassmorphic background with blur
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                            
-                            // Subtle gradient overlay for depth
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.2),
-                                            Color.white.opacity(0.1),
-                                            Color.white.opacity(0.05)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                            
-                            // Light refraction effect at the top
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.2),
-                                            Color.clear
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .center
-                                    )
-                                )
-                        }
+                        Circle()
+                            .fill(readingMode.cardBackground)
                     )
                     .overlay(
                         Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.8),
-                                        Color.white.opacity(0.3),
-                                        readingMode.textColor.opacity(0.1),
-                                        Color.white.opacity(0.3)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
+                            .stroke(readingMode.textColor.opacity(0.15), lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
-                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
-                    .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
+                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 2)
+                    .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 1)
             }
             .buttonStyle(PlainButtonStyle())
             .disabled(!canGoPrevious)
@@ -2460,58 +2282,15 @@ private struct ChapterNavigationBar: View {
                     .foregroundColor(canGoNext ? readingMode.textColor : readingMode.textColor.opacity(0.3))
                     .frame(width: 44, height: 44)
                     .background(
-                        ZStack {
-                            // Glassmorphic background with blur
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                            
-                            // Subtle gradient overlay for depth
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.2),
-                                            Color.white.opacity(0.1),
-                                            Color.white.opacity(0.05)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                            
-                            // Light refraction effect at the top
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color.white.opacity(0.2),
-                                            Color.clear
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .center
-                                    )
-                                )
-                        }
+                        Circle()
+                            .fill(readingMode.cardBackground)
                     )
                     .overlay(
                         Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        Color.white.opacity(0.8),
-                                        Color.white.opacity(0.3),
-                                        readingMode.textColor.opacity(0.1),
-                                        Color.white.opacity(0.3)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
+                            .stroke(readingMode.textColor.opacity(0.15), lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
-                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
-                    .shadow(color: Color.white.opacity(0.6), radius: 1, x: 0, y: -1)
+                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 2)
+                    .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 1)
             }
             .buttonStyle(PlainButtonStyle())
             .disabled(!canGoNext)

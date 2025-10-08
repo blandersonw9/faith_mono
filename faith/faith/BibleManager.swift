@@ -85,6 +85,24 @@ struct BibleTranslation {
     static func getTranslation(byId id: String) -> BibleTranslation? {
         return translations.first { $0.id == id }
     }
+    
+    /// Check if this translation's database file exists in the bundle
+    var isAvailable: Bool {
+        let path = Bundle.main.path(forResource: filename, ofType: fileExtension)
+        let available = path != nil
+        #if DEBUG
+        print("📚 Translation \(abbreviation): \(available ? "✅ Available" : "❌ Not found") - looking for: \(filename).\(fileExtension)")
+        if let p = path {
+            print("   Found at: \(p)")
+        }
+        #endif
+        return available
+    }
+    
+    /// Get only translations that have their database files available
+    static var availableTranslations: [BibleTranslation] {
+        return translations.filter { $0.isAvailable }
+    }
 }
 
 class BibleManager: ObservableObject {
@@ -134,13 +152,19 @@ class BibleManager: ObservableObject {
         guard let dbPath = Bundle.main.path(forResource: currentTranslation.filename, ofType: currentTranslation.fileExtension) else {
             errorMessage = "Could not find \(currentTranslation.abbreviation) Bible database"
             #if DEBUG
-            print("Failed to find database: \(currentTranslation.filename).\(currentTranslation.fileExtension)")
+            print("❌ Failed to find database: \(currentTranslation.filename).\(currentTranslation.fileExtension)")
             #endif
             return
         }
         
         if sqlite3_open(dbPath, &db) != SQLITE_OK {
             errorMessage = "Could not open \(currentTranslation.abbreviation) Bible database"
+            #if DEBUG
+            print("❌ Failed to open database: \(currentTranslation.abbreviation)")
+            if let errorMessage = String(validatingUTF8: sqlite3_errmsg(db)) {
+                print("   SQLite error: \(errorMessage)")
+            }
+            #endif
             return
         }
         
@@ -150,10 +174,16 @@ class BibleManager: ObservableObject {
     }
     
     func switchTranslation(_ translation: BibleTranslation) {
+        #if DEBUG
+        print("🔄 Switching translation to: \(translation.abbreviation)")
+        #endif
         currentTranslation = translation
         UserDefaults.standard.set(translation.id, forKey: "bibleTranslation")
         openDatabase()
         // Reload current chapter with new translation
+        #if DEBUG
+        print("🔄 Reloading verses for: \(translation.abbreviation), book: \(currentBook), chapter: \(currentChapter)")
+        #endif
         loadVerses(book: currentBook, chapter: currentChapter)
     }
     
