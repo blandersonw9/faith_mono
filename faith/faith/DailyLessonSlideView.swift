@@ -22,12 +22,14 @@ struct DailyLessonSlideView: View {
     @State private var imageLoaded: Bool = false
     @State private var preloadedImages: [Int: UIImage] = [:] // Cache of preloaded images by slide index
     
-    // Get background image URL for current slide (deterministic based on slide index)
+    // Get background image URL for current slide (deterministic based on slide index and date)
     private var currentBackgroundImageURL: String? {
         guard !dailyLessonManager.backgroundImageURLs.isEmpty else {
             return nil
         }
-        let index = currentSlideIndex % dailyLessonManager.backgroundImageURLs.count
+        // Add day-based offset so backgrounds rotate daily
+        let dayOffset = dailyLessonManager.getDayOffset()
+        let index = (currentSlideIndex + dayOffset) % dailyLessonManager.backgroundImageURLs.count
         return dailyLessonManager.backgroundImageURLs[index]
     }
     
@@ -37,8 +39,10 @@ struct DailyLessonSlideView: View {
         if let cached = preloadedImages[currentSlideIndex] {
             return cached
         }
-        // If it's the first slide and manager has preloaded it, use that
-        if currentSlideIndex == 0, let firstImage = dailyLessonManager.preloadedFirstImage {
+        // If it's the first slide, we can use the manager's preloaded first image
+        // (it was preloaded with today's offset already applied)
+        if currentSlideIndex == 0,
+           let firstImage = dailyLessonManager.preloadedFirstImage {
             return firstImage
         }
         return nil
@@ -341,6 +345,7 @@ struct DailyLessonSlideView: View {
         }
         
         // Use the already-preloaded first image from manager if available
+        // (it was preloaded with today's offset already applied)
         if let firstImage = dailyLessonManager.preloadedFirstImage {
             preloadedImages[0] = firstImage
             print("✅ Using pre-cached first image from home screen")
@@ -352,10 +357,11 @@ struct DailyLessonSlideView: View {
         
         Task {
             var loadedCount = preloadedImages.isEmpty ? 0 : 1 // Count first image if already loaded
+            let dayOffset = dailyLessonManager.getDayOffset()
             
             // Preload images for each slide
             for slideIndex in 0..<totalSlides {
-                let imageIndex = slideIndex % dailyLessonManager.backgroundImageURLs.count
+                let imageIndex = (slideIndex + dayOffset) % dailyLessonManager.backgroundImageURLs.count
                 let urlString = dailyLessonManager.backgroundImageURLs[imageIndex]
                 
                 // Skip if already loaded

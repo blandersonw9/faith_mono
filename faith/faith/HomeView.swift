@@ -252,7 +252,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
-                let horizontalPadding = geometry.size.width * 0.025
+                let horizontalPadding = max(geometry.size.width * 0.025, 16)
                 
                 ScrollView {
                 VStack(spacing: StyleGuide.spacing.xl) {
@@ -279,13 +279,15 @@ struct HomeView: View {
                     
                     // Today Content Section
                     TodayContent()
-                        .padding(.horizontal, horizontalPadding)
+                        .padding(.horizontal, 16)
                     
-                    // Bottom spacing for better scrolling
+                    // Bottom spacing for better scrolling - increased for smaller screens and tab bar
                     Spacer()
-                        .frame(height: 40)
+                        .frame(height: 120)
                 }
+                .frame(width: geometry.size.width)
                 }
+                .scrollIndicators(.hidden)
                 .onAppear {
                     // Only fetch lesson - user data is already loaded by faithApp
                     Task {
@@ -425,22 +427,21 @@ struct TodayContent: View {
                     .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 24)
+        .padding(20)
         .background(
             ZStack {
-                // Background image
+                // Background image - constrained to the card size
                 Group {
                     if let cachedImage = dailyLessonManager.preloadedFirstImage {
                         // Use preloaded image for instant display
                         Image(uiImage: cachedImage)
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .scaledToFill()
                     } else {
                         // Fallback to hardcoded image while loading
                         Image("backgroundCard")
                             .resizable()
-                            .aspectRatio(contentMode: .fill)
+                            .scaledToFill()
                     }
                 }
                 
@@ -456,7 +457,7 @@ struct TodayContent: View {
                 )
             }
         )
-        .cornerRadius(12)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
         .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 8)
         .fullScreenCover(isPresented: $showLesson) {

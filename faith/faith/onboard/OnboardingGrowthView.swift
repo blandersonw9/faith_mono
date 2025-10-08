@@ -35,74 +35,79 @@ struct OnboardingGrowthView: View {
             StyleGuide.backgroundBeige
                 .ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                // Top spacing
-                Spacer()
-                    .frame(height: 80)
-                
-                // Glowing Halo (66% progress for page 2 of 3)
-                GlowingHalo(progress: 0.66)
-                
-                // Question Text
-                VStack(spacing: StyleGuide.spacing.lg) {
-                    AnimatedTypingText(
-                        fullText: "How would you like to grow in your spiritual journey right now?",
-                        font: StyleGuide.merriweather(size: 22, weight: .regular),
-                        color: StyleGuide.mainBrown,
-                        lineSpacing: 8
-                    )
-                    .multilineTextAlignment(.center)
-                }
-                .padding(.top, StyleGuide.spacing.xl)
-                .padding(.horizontal, StyleGuide.spacing.xl)
-                
-                // Chip buttons
-                FlowLayout(spacing: 8) {
-                    ForEach(growthOptions, id: \.self) { option in
-                        ChipButton(
-                            title: option,
-                            isSelected: selectedOptions.contains(option)
-                        ) {
-                            toggleOption(option)
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Top spacing
+                    Spacer()
+                        .frame(height: 80)
+                    
+                    // Glowing Halo (66% progress for page 2 of 3)
+                    GlowingHalo(progress: 0.66)
+                    
+                    // Question Text
+                    VStack(spacing: StyleGuide.spacing.lg) {
+                        AnimatedTypingText(
+                            fullText: "How would you like to grow in your spiritual journey right now?",
+                            font: StyleGuide.merriweather(size: 22, weight: .regular),
+                            color: StyleGuide.mainBrown,
+                            lineSpacing: 8
+                        )
+                        .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, StyleGuide.spacing.xl)
+                    .padding(.horizontal, StyleGuide.spacing.xl)
+                    
+                    // Chip buttons
+                    FlowLayout(spacing: 8) {
+                        ForEach(growthOptions, id: \.self) { option in
+                            ChipButton(
+                                title: option,
+                                isSelected: selectedOptions.contains(option)
+                            ) {
+                                toggleOption(option)
+                            }
                         }
                     }
-                }
-                .padding(.horizontal, StyleGuide.spacing.xl)
-                .padding(.top, StyleGuide.spacing.md)
-                
-                Spacer()
-                
-                VStack(spacing: StyleGuide.spacing.md) {
-                    // Text input field (optional)
-                    TextField("Or share something else...", text: $growthAnswer)
-                        .font(StyleGuide.merriweather(size: 16, weight: .regular))
-                        .foregroundColor(StyleGuide.mainBrown)
-                        .focused($isTextFieldFocused)
-                        .padding(StyleGuide.spacing.md)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.7))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(StyleGuide.gold.opacity(0.4), lineWidth: 1.5)
-                        )
+                    .padding(.horizontal, StyleGuide.spacing.xl)
+                    .padding(.top, StyleGuide.spacing.md)
                     
-                    // Next button
-                    Button(action: {
-                        completeStep()
-                    }) {
-                        Text("Next")
-                            .frame(maxWidth: .infinity)
+                    // Spacer for vertical centering when content is small
+                    Spacer()
+                        .frame(minHeight: 40)
+                    
+                    VStack(spacing: StyleGuide.spacing.md) {
+                        // Text input field (optional)
+                        TextField("Or share something else...", text: $growthAnswer)
+                            .font(StyleGuide.merriweather(size: 16, weight: .regular))
+                            .foregroundColor(StyleGuide.mainBrown)
+                            .focused($isTextFieldFocused)
+                            .padding(StyleGuide.spacing.md)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.white.opacity(0.7))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(StyleGuide.gold.opacity(0.4), lineWidth: 1.5)
+                            )
+                        
+                        // Next button
+                        Button(action: {
+                            completeStep()
+                        }) {
+                            Text("Next")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(!selectedOptions.isEmpty || !growthAnswer.isEmpty ? false : true)
+                        .opacity((!selectedOptions.isEmpty || !growthAnswer.isEmpty) ? 1.0 : 0.5)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!selectedOptions.isEmpty || !growthAnswer.isEmpty ? false : true)
-                    .opacity((!selectedOptions.isEmpty || !growthAnswer.isEmpty) ? 1.0 : 0.5)
+                    .padding(.horizontal, StyleGuide.spacing.xl)
+                    .padding(.bottom, StyleGuide.spacing.xl)
                 }
-                .padding(.horizontal, StyleGuide.spacing.xl)
-                .padding(.bottom, StyleGuide.spacing.xl)
+                .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollDismissesKeyboard(.interactively)
         }
     }
     

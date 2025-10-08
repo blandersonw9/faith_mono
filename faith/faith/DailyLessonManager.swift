@@ -31,6 +31,18 @@ class DailyLessonManager: ObservableObject {
         }
     }
     
+    // MARK: - Day Offset Calculation
+    
+    // Get a deterministic offset based on current date
+    // This ensures backgrounds rotate daily but are consistent throughout the day
+    func getDayOffset() -> Int {
+        let calendar = Calendar.current
+        let today = Date()
+        // Use day of year as offset
+        let dayOfYear = calendar.ordinality(of: .day, in: .year, for: today) ?? 0
+        return dayOfYear
+    }
+    
     // MARK: - Fetch Background Images
     
     @MainActor
@@ -41,9 +53,13 @@ class DailyLessonManager: ObservableObject {
             self.backgroundImageURLs = backgrounds
             print("✅ Loaded \(backgrounds.count) background images from Supabase")
             if !backgrounds.isEmpty {
-                print("📸 First background URL: \(backgrounds[0])")
+                // Calculate which background will be shown first today
+                let dayOffset = getDayOffset()
+                let firstImageIndex = dayOffset % backgrounds.count
+                let firstImageURL = backgrounds[firstImageIndex]
+                print("📸 Today's first background URL (index \(firstImageIndex)): \(firstImageURL)")
                 // Preload the first image for home screen preview
-                await preloadFirstImage(url: backgrounds[0])
+                await preloadFirstImage(url: firstImageURL)
             }
         } catch {
             print("❌ Failed to fetch background images: \(error)")
