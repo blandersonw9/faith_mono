@@ -14,6 +14,7 @@ struct faithApp: App {
     @StateObject private var bibleNavigator: BibleNavigator
     @StateObject private var userDataManager: UserDataManager
     @StateObject private var dailyLessonManager: DailyLessonManager
+    @StateObject private var customStudyManager: CustomStudyManager
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     init() {
@@ -23,6 +24,7 @@ struct faithApp: App {
         _bibleNavigator = StateObject(wrappedValue: BibleNavigator())
         _userDataManager = StateObject(wrappedValue: UserDataManager(supabase: auth.supabase, authManager: auth))
         _dailyLessonManager = StateObject(wrappedValue: DailyLessonManager(supabase: auth.supabase))
+        _customStudyManager = StateObject(wrappedValue: CustomStudyManager(supabaseClient: auth.supabase))
     }
     
     var body: some Scene {
@@ -39,6 +41,7 @@ struct faithApp: App {
                             .environmentObject(bibleNavigator)
                             .environmentObject(userDataManager)
                             .environmentObject(dailyLessonManager)
+                            .environmentObject(customStudyManager)
                             .task {
                                 print("📱 Showing: ContentView - Loading user data")
                                 // Fetch user data when authenticated
@@ -51,6 +54,7 @@ struct faithApp: App {
                             .environmentObject(bibleNavigator)
                             .environmentObject(userDataManager)
                             .environmentObject(dailyLessonManager)
+                            .environmentObject(customStudyManager)
                             .onAppear { print("📱 Showing: OnboardingFlowView") }
                             .transition(.opacity)
                     }

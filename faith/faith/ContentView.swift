@@ -12,6 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @EnvironmentObject var userDataManager: UserDataManager
+    @EnvironmentObject var customStudyManager: CustomStudyManager
     @State private var selectedTab = 0
     @State private var showingChat = false
     @State private var initialChatPrompt: String? = nil
@@ -56,6 +57,7 @@ struct ContentView: View {
                 HomeView()
                     .environmentObject(userDataManager)
                     .environmentObject(bibleNavigator)
+                    .environmentObject(customStudyManager)
                     .opacity(selectedTab == 0 ? 1 : 0)
                     .zIndex(selectedTab == 0 ? 1 : 0)
                 

@@ -1,0 +1,6 @@
+# Supabase Configuration
+# https://supabase.com/docs/guides/functions
+
+[functions.generate-custom-study]
+verify_jwt = true
+

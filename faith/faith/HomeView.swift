@@ -331,7 +331,10 @@ struct HomeView: View {
 struct TodayContent: View {
     @EnvironmentObject var dailyLessonManager: DailyLessonManager
     @EnvironmentObject var userDataManager: UserDataManager
+    @EnvironmentObject var customStudyManager: CustomStudyManager
     @State private var showLesson: Bool = false
+    @State private var showCustomStudyIntake: Bool = false
+    @State private var hasLoadedStudy = false
     
     // Get today's date formatted
     private var formattedDate: String {
@@ -398,77 +401,140 @@ struct TodayContent: View {
     }
     
     var body: some View {
-        VStack(spacing: 28) {
-            // TOP: Daily practice date (dynamic)
-            Text("Daily practice | \(formattedDate)")
-                .font(StyleGuide.merriweather(size: 12, weight: .semibold))
-                .foregroundColor(.white.opacity(0.9))
-                .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
-                .frame(maxWidth: .infinity, alignment: .center)
+        VStack(spacing: 20) {
+            // Daily Lesson Card
+            VStack(spacing: 28) {
+                // TOP: Daily practice date (dynamic)
+                Text("Daily practice | \(formattedDate)")
+                    .font(StyleGuide.merriweather(size: 12, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                
+                // CENTER: Bible verse (from today's lesson)
+                Text(scriptureText)
+                    .font(StyleGuide.merriweather(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .lineSpacing(6)
+                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+                
+                // BOTTOM: Dynamic button (Start / Continue / Review)
+                Button(action: { showLesson = true }) {
+                    Text(buttonText)
+                        .font(StyleGuide.merriweather(size: 14, weight: .semibold))
+                        .foregroundColor(buttonTextColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 45)
+                        .background(buttonBackgroundColor)
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+            }
+            .padding(20)
+            .background(
+                ZStack {
+                    // Background image - constrained to the card size
+                    Group {
+                        if let cachedImage = dailyLessonManager.preloadedFirstImage {
+                            // Use preloaded image for instant display
+                            Image(uiImage: cachedImage)
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            // Fallback to hardcoded image while loading
+                            Image("backgroundCard")
+                                .resizable()
+                                .scaledToFill()
+                        }
+                    }
+                    
+                    // Dark overlay for text readability
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.black.opacity(0.35),
+                            Color.black.opacity(0.25),
+                            Color.black.opacity(0.35)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
+            .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 8)
             
-            // CENTER: Bible verse (from today's lesson)
-            Text(scriptureText)
-                .font(StyleGuide.merriweather(size: 17, weight: .semibold))
-                .foregroundColor(.white)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .lineSpacing(6)
-                .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+            // Active Custom Study Section (if exists or generating)
+            if customStudyManager.currentStudy != nil || customStudyManager.isGenerating {
+                ActiveCustomStudySection()
+                    .environmentObject(customStudyManager)
+            }
             
-            // BOTTOM: Dynamic button (Start / Continue / Review)
-            Button(action: { showLesson = true }) {
-                Text(buttonText)
-                    .font(StyleGuide.merriweather(size: 14, weight: .semibold))
-                    .foregroundColor(buttonTextColor)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 45)
-                    .background(buttonBackgroundColor)
+            // Generate Custom Bible Study Button (hidden when generating or study exists)
+            if !customStudyManager.isGenerating && customStudyManager.currentStudy == nil {
+                Button(action: { showCustomStudyIntake = true }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "book.pages.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(StyleGuide.gold)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Generate Custom Bible Study")
+                                .font(StyleGuide.merriweather(size: 15, weight: .semibold))
+                                .foregroundColor(StyleGuide.mainBrown)
+                            
+                            Text("10-part personalized study based on your interests")
+                                .font(StyleGuide.merriweather(size: 11, weight: .medium))
+                                .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(StyleGuide.mainBrown.opacity(0.3))
+                    }
+                    .padding(16)
+                    .background(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(StyleGuide.gold.opacity(0.3), lineWidth: 1.5)
+                    )
                     .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+                }
             }
         }
-        .padding(20)
-        .background(
-            ZStack {
-                // Background image - constrained to the card size
-                Group {
-                    if let cachedImage = dailyLessonManager.preloadedFirstImage {
-                        // Use preloaded image for instant display
-                        Image(uiImage: cachedImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        // Fallback to hardcoded image while loading
-                        Image("backgroundCard")
-                            .resizable()
-                            .scaledToFill()
-                    }
-                }
-                
-                // Dark overlay for text readability
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.black.opacity(0.35),
-                        Color.black.opacity(0.25),
-                        Color.black.opacity(0.35)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 4)
-        .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 8)
         .fullScreenCover(isPresented: $showLesson) {
             DailyLessonSlideView(dailyLessonManager: dailyLessonManager, userDataManager: userDataManager)
                 .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showCustomStudyIntake) {
+            CustomStudyIntakeView()
+                .environmentObject(customStudyManager)
         }
         .onChange(of: showLesson) { isShowing in
             // Refresh only lesson data when returning - user data refresh handled by ContentView scenePhase
             if !isShowing {
                 Task {
                     await dailyLessonManager.fetchTodaysLesson()
+                }
+            }
+        }
+        .task {
+            // Load active custom study once (non-blocking)
+            if !hasLoadedStudy {
+                hasLoadedStudy = true
+                Task.detached {
+                    do {
+                        print("📚 Fetching active custom study...")
+                        try await customStudyManager.fetchActiveStudy()
+                        print("✅ Custom study fetch complete")
+                    } catch {
+                        print("⚠️ No active custom study or error: \(error)")
+                    }
                 }
             }
         }
