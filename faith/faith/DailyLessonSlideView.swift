@@ -13,6 +13,7 @@ import UIKit
 struct DailyLessonSlideView: View {
     @ObservedObject var dailyLessonManager: DailyLessonManager
     @ObservedObject var userDataManager: UserDataManager
+    @EnvironmentObject var notificationManager: NotificationManager
     @Environment(\.dismiss) private var dismiss
     @State private var currentSlideIndex: Int = 0
     @State private var showingShareSheet: Bool = false
@@ -442,6 +443,11 @@ struct DailyLessonSlideView: View {
                 } catch {
                     print("⚠️ Failed to update streak: \(error.localizedDescription)")
                     // Don't block dismissal even if streak update fails
+                }
+                
+                // Clear notification badge since lesson is complete
+                await MainActor.run {
+                    notificationManager.updateLessonCompletionStatus(isCompleted: true)
                 }
                 
                 // Dismiss the view after marking as completed

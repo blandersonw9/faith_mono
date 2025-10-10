@@ -246,6 +246,7 @@ struct HomeView: View {
     @EnvironmentObject var userDataManager: UserDataManager
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @EnvironmentObject var dailyLessonManager: DailyLessonManager
+    @EnvironmentObject var notificationManager: NotificationManager
     @State private var showingProfile = false
     @State private var showBadgeProgress = false
     

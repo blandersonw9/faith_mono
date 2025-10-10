@@ -13,6 +13,7 @@ struct ContentView: View {
     @EnvironmentObject var authManager: AuthManager
     @EnvironmentObject var bibleNavigator: BibleNavigator
     @EnvironmentObject var userDataManager: UserDataManager
+    @EnvironmentObject var notificationManager: NotificationManager
     @State private var selectedTab = 0
     @State private var showingChat = false
     @State private var initialChatPrompt: String? = nil
@@ -158,7 +159,15 @@ struct ContentView: View {
                 Task {
                     await userDataManager.fetchUserData()
                 }
+                // Clear badge when app becomes active
+                notificationManager.clearBadge()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openDailyLesson)) { _ in
+            print("📱 Opening daily lesson from notification")
+            // Navigate to home tab (where daily lesson is)
+            selectedTab = 0
+            showingChat = false
         }
         .onChange(of: authManager.isAuthenticated) { isAuth in
             if isAuth {

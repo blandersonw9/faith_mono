@@ -9,6 +9,7 @@ import SwiftUI
 
 struct OnboardingFlowView: View {
     @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var notificationManager: NotificationManager
     @State private var currentPage: Int = 0
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
@@ -30,6 +31,13 @@ struct OnboardingFlowView: View {
                 })
                 .transition(.opacity)
             case 2:
+                OnboardingNotificationsView(onContinue: {
+                    withAnimation {
+                        currentPage = 3
+                    }
+                })
+                .transition(.opacity)
+            case 3:
                 OnboardingLoadingView(onComplete: {
                     hasCompletedOnboarding = true
                 })

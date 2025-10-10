@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @main
 struct faithApp: App {
@@ -14,6 +15,7 @@ struct faithApp: App {
     @StateObject private var bibleNavigator: BibleNavigator
     @StateObject private var userDataManager: UserDataManager
     @StateObject private var dailyLessonManager: DailyLessonManager
+    @StateObject private var notificationManager = NotificationManager()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     
     init() {
@@ -39,10 +41,23 @@ struct faithApp: App {
                             .environmentObject(bibleNavigator)
                             .environmentObject(userDataManager)
                             .environmentObject(dailyLessonManager)
+                            .environmentObject(notificationManager)
                             .task {
                                 print("📱 Showing: ContentView - Loading user data")
                                 // Fetch user data when authenticated
                                 await userDataManager.fetchUserData()
+                                
+                                // Set up notification manager with references to other managers
+                                notificationManager.setManagers(
+                                    dailyLessonManager: dailyLessonManager,
+                                    userDataManager: userDataManager
+                                )
+                                
+                                // Check notification authorization and schedule smart notifications
+                                notificationManager.checkAuthorizationStatus()
+                                if notificationManager.isAuthorized {
+                                    await notificationManager.scheduleSmartNotifications()
+                                }
                             }
                             .transition(.opacity)
                     } else {
@@ -51,6 +66,7 @@ struct faithApp: App {
                             .environmentObject(bibleNavigator)
                             .environmentObject(userDataManager)
                             .environmentObject(dailyLessonManager)
+                            .environmentObject(notificationManager)
                             .onAppear { print("📱 Showing: OnboardingFlowView") }
                             .transition(.opacity)
                     }
@@ -82,6 +98,10 @@ struct faithApp: App {
                 UINavigationBar.appearance().standardAppearance = appearance
                 UINavigationBar.appearance().scrollEdgeAppearance = appearance
                 UINavigationBar.appearance().compactAppearance = appearance
+                
+                // Set notification delegate
+                UNUserNotificationCenter.current().delegate = notificationManager
+                print("📱 Notification delegate set")
             }
         }
     }
