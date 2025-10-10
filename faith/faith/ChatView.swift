@@ -27,16 +27,21 @@ struct ChatView: View {
     
     // UI constants to avoid magic numbers
     private enum UI {
-        static let leftEdgeSwipeWidth: CGFloat = 40
-        static let backSwipeTriggerDx: CGFloat = 50
-        static let backSwipeDYTolerance: CGFloat = 50
-        static let dismissSwipeDy: CGFloat = 150
         static let bottomFadeThreshold: CGFloat = -30
         static let bottomFadeHeight: CGFloat = 24
     }
     
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
+    
+    // Get current reading mode for proper background
+    private var currentReadingMode: ReadingMode {
+        if let saved = UserDefaults.standard.string(forKey: "bibleReadingMode"),
+           let mode = ReadingMode(rawValue: saved) {
+            return mode
+        }
+        return .day
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -48,8 +53,10 @@ struct ChatView: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(StyleGuide.mainBrown)
+                        .frame(width: 32, height: 44) // Larger tap target
+                        .contentShape(Rectangle()) // Make entire frame tappable
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(BackButtonStyle())
                 
                 Text("Faith Chat")
                     .font(StyleGuide.merriweather(size: 16, weight: .semibold))
@@ -60,8 +67,10 @@ struct ChatView: View {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(StyleGuide.mainBrown)
+                        .frame(width: 44, height: 44) // Larger tap target
+                        .contentShape(Rectangle()) // Make entire frame tappable
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(BackButtonStyle())
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -156,40 +165,78 @@ struct ChatView: View {
             .padding(.bottom, 14)
             .background(Color.clear)
         }
-        .background(StyleGuide.backgroundBeige.ignoresSafeArea())
+        .background(
+            ZStack {
+                if isDragging {
+                    // Three-panel background system when dragging
+                    HStack(spacing: 0) {
+                        // Left panel: underlying screen background
+                        Group {
+                            if selectedTab == 0 {
+                                Image("background")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } else {
+                                currentReadingMode.backgroundColor
+                            }
+                        }
+                        .frame(width: UIScreen.main.bounds.width)
+                        .ignoresSafeArea(.all)
+                        
+                        // Center panel: chat background
+                        StyleGuide.backgroundBeige
+                            .frame(width: UIScreen.main.bounds.width)
+                            .ignoresSafeArea(.all)
+                        
+                        // Right panel: chat background (for negative drags)
+                        StyleGuide.backgroundBeige
+                            .frame(width: UIScreen.main.bounds.width)
+                            .ignoresSafeArea(.all)
+                    }
+                    .offset(x: -UIScreen.main.bounds.width + dragOffset)
+                } else {
+                    // Normal chat background when not dragging
+                    StyleGuide.backgroundBeige
+                        .ignoresSafeArea(.all)
+                }
+            }
+        )
         .offset(x: dragOffset)
         .animation(isDragging ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: dragOffset)
-        .gesture(
-            DragGesture(minimumDistance: 10, coordinateSpace: .global)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { value in
-                    // Only respond to swipes starting from the left edge
-                    guard value.startLocation.x < UI.leftEdgeSwipeWidth else { return }
+                    // Only respond to swipes starting from the left edge (within 20 points)
+                    // but exclude the top bar area where buttons are located
+                    guard value.startLocation.x < 20 && value.startLocation.y > 80 else { return }
                     
-                    // Only respond to rightward swipes with minimal vertical movement
                     let dx = value.translation.width
                     let dy = abs(value.translation.height)
                     
-                    guard dx > 0, dy < UI.backSwipeDYTolerance else { return }
+                    // Start dragging on any significant horizontal motion
+                    if abs(dx) > 5 && dy < max(100, abs(dx) * 0.75) {
+                        isDragging = true
+                    }
                     
-                    isDragging = true
-                    dragOffset = min(dx, 300) // Cap the drag distance
+                    // Update dragOffset for any movement while dragging, but clamp it
+                    if isDragging {
+                        dragOffset = max(-100, min(dx, 200)) // Allow small negative drag, cap positive
+                    }
                 }
                 .onEnded { value in
                     guard isDragging else { return }
                     
                     let dx = value.translation.width
-                    let dy = abs(value.translation.height)
+                    let velocity = value.velocity.width
                     
                     isDragging = false
                     
-                    // Dismiss if dragged far enough to the right
-                    if dx > UI.backSwipeTriggerDx && dy < UI.backSwipeDYTolerance {
-                        // Dismiss immediately - let NavigationStack handle the transition
+                    // Dismiss if dragged far enough OR has sufficient velocity
+                    if dx > 80 || (dx > 30 && velocity > 300) {
+                        // Dismiss immediately and let SwiftUI handle the transition
                         showingChat = false
-                        // Reset offset after navigation completes
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            dragOffset = 0
-                        }
+                        // Reset drag offset immediately to avoid visual glitches
+                        dragOffset = 0
                     } else {
                         // Spring back if not dragged far enough
                         dragOffset = 0
@@ -1099,6 +1146,15 @@ private struct PressedButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.85 : 1.0)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+private struct BackButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .opacity(configuration.isPressed ? 0.6 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

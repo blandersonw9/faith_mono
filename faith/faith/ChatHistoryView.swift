@@ -19,8 +19,11 @@ struct ChatHistoryView: View {
                                 .font(StyleGuide.merriweather(size: 12))
                                 .foregroundColor(StyleGuide.mainBrown.opacity(0.6))
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
                     }
                     .buttonStyle(.plain)
+                    .listRowBackground(Color.clear)
                 }
                 .onDelete { indexSet in
                     let current = store.listConversations()
@@ -28,21 +31,34 @@ struct ChatHistoryView: View {
                 }
             }
             .listStyle(.plain)
+            .background(StyleGuide.backgroundBeige)
+            .scrollContentBackground(.hidden)
             .navigationTitle("Conversations")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(StyleGuide.backgroundBeige, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
+                    Button("Close") { 
+                        dismiss() 
+                    }
+                    .foregroundColor(StyleGuide.mainBrown)
+                    .font(StyleGuide.merriweather(size: 16))
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { onStartNew(); dismiss() }) {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
+                                .font(.system(size: 14, weight: .semibold))
                             Text("New")
+                                .font(StyleGuide.merriweather(size: 16))
                         }
+                        .foregroundColor(StyleGuide.mainBrown)
                     }
                 }
             }
         }
+        .background(StyleGuide.backgroundBeige.ignoresSafeArea())
     }
 }
 
