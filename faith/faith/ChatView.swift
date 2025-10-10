@@ -262,6 +262,17 @@ struct ChatView: View {
                     return .handled
                 }
                 return .discarded
+            } else if url.scheme == "faithapp" {
+                if let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                   comps.host == "addfriend",
+                   let username = comps.queryItems?.first(where: { $0.name == "username" })?.value {
+                    // Store the username to pre-fill in AddFriendView
+                    UserDefaults.standard.set(username, forKey: "pendingFriendUsername")
+                    // Navigate to friends manager
+                    NotificationCenter.default.post(name: .openFriendsManager, object: nil)
+                    return .handled
+                }
+                return .discarded
             }
             return .systemAction
         })

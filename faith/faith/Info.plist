@@ -32,6 +32,16 @@
 				<string>com.googleusercontent.apps.845381061349-h4c9jk0dr3gfjb97mpb64o4oiaasf70g</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>FaithApp</string>
+			<key>CFBundleURLRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>faithapp</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>

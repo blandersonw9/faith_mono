@@ -536,4 +536,5 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
 extension Notification.Name {
     static let openDailyLesson = Notification.Name("openDailyLesson")
+    static let openFriendsManager = Notification.Name("openFriendsManager")
 }

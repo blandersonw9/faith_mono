@@ -29,6 +29,9 @@ struct ProfileView: View {
     @State private var showDeleteConfirmation = false
     @State private var isDeletingAccount = false
     
+    // Friends management
+    @State private var showingFriendsManager = false
+    
     private var displayStreak: Int {
         debugStreakOverride ?? userDataManager.getCurrentStreak()
     }
@@ -678,9 +681,39 @@ struct ProfileView: View {
                             .padding(.horizontal, StyleGuide.spacing.lg)
                         
                         VStack(spacing: 0) {
+                            // Add Friend Button (prominent)
+                            Button(action: {
+                                showingFriendsManager = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "person.badge.plus.fill")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.white)
+                                    
+                                    Text("Add Friend")
+                                        .font(StyleGuide.merriweather(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    
+                                    Spacer()
+                                    
+                                    Image(systemName: "arrow.right")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+                                .padding(.horizontal, StyleGuide.spacing.lg)
+                                .padding(.vertical, StyleGuide.spacing.md)
+                                .background(StyleGuide.gold)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            // Divider
+                            Rectangle()
+                                .fill(StyleGuide.mainBrown.opacity(0.1))
+                                .frame(height: 1)
+                            
                             // Manage Friends Button
                             Button(action: {
-                                // TODO: Navigate to friends management
+                                showingFriendsManager = true
                             }) {
                                 HStack {
                                     Image(systemName: "person.2.fill")
@@ -822,11 +855,17 @@ struct ProfileView: View {
             print("🔔 showingEditNote changed to: \(newValue)")
             print("   selectedNote: \(selectedNote?.verseReference ?? "nil")")
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openFriendsManager)) { _ in
+            showingFriendsManager = true
+        }
         .sheet(isPresented: $showingEditProfile) {
             EditProfileView(
                 userDataManager: userDataManager,
                 authManager: authManager
             )
+        }
+        .sheet(isPresented: $showingFriendsManager) {
+            FriendsManagerView(userDataManager: userDataManager)
         }
         .sheet(item: $showBadgeDetail) { badge in
             BadgeDetailView(

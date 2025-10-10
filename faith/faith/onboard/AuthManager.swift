@@ -107,7 +107,7 @@ class AuthManager: ObservableObject {
             // Check if profile already exists
             let existing: [UserProfile] = try await supabase
                 .from("profiles")
-                .select()
+                .select("id, username, display_name, profile_picture_url, growth_goal, onboarding_completed_at, created_at, updated_at")
                 .eq("id", value: userId.uuidString)
                 .execute()
                 .value
@@ -159,9 +159,18 @@ class AuthManager: ObservableObject {
                     .insert(progress)
                     .execute()
                 
-                print("✅ Profile and progress created successfully")
+                print("✅ Profile and progress created successfully with temporary username: \(username)")
             } else {
-                print("✅ Profile already exists")
+                print("✅ Profile already exists for returning user")
+                
+                // Check if user has completed onboarding by checking if they have a proper username and growth goal
+                if let profile = existing.first,
+                   let onboardingCompletedAt = profile.onboarding_completed_at,
+                   !onboardingCompletedAt.isEmpty {
+                    // User has completed onboarding - update local storage to skip onboarding
+                    UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                    print("✅ Detected returning user - skipping onboarding")
+                }
             }
         } catch {
             print("⚠️ Error ensuring profile exists: \(error)")

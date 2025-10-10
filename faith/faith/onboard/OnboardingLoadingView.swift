@@ -108,8 +108,24 @@ struct OnboardingLoadingView: View {
         do {
             let userId = try await authManager.supabase.auth.session.user.id
             
-            // Generate unique username from first name
-            let username = await generateUniqueUsername()
+            // Check if user already has a username (returning user)
+            let existingProfile: [ExistingProfile] = try await authManager.supabase
+                .from("profiles")
+                .select("username")
+                .eq("id", value: userId.uuidString)
+                .execute()
+                .value
+            
+            let username: String
+            if let existing = existingProfile.first, !existing.username.isEmpty {
+                // User already has a username - preserve it
+                username = existing.username
+                print("✅ Preserving existing username: \(username)")
+            } else {
+                // New user - generate unique username from first name
+                username = await generateUniqueUsername()
+                print("✅ Generated new username for new user: \(username)")
+            }
             
             // Create update object
             let update = OnboardingUpdate(
@@ -186,6 +202,11 @@ struct OnboardingLoadingView: View {
     // UserProfile struct for username checking
     private struct UserProfile: Codable {
         let id: UUID
+        let username: String
+    }
+    
+    // ExistingProfile struct for checking existing usernames
+    private struct ExistingProfile: Codable {
         let username: String
     }
     
