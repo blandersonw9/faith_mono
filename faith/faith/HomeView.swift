@@ -249,41 +249,58 @@ struct HomeView: View {
     @State private var showingProfile = false
     @State private var showBadgeProgress = false
     
+    // Detect if running on iPad or larger screen
+    private var isIPad: Bool {
+        // Check both idiom and screen size to catch iPad compatibility mode
+        let idiom = UIDevice.current.userInterfaceIdiom == .pad
+        let screenWidth = UIScreen.main.bounds.width
+        let screenHeight = UIScreen.main.bounds.height
+        let largestDimension = max(screenWidth, screenHeight)
+        // iPad screens are typically 1024+ points in their largest dimension
+        return idiom || largestDimension >= 1024
+    }
+    
     var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
+        GeometryReader { geometry in
                 let horizontalPadding = max(geometry.size.width * 0.025, 16)
+                let maxContentWidth: CGFloat = isIPad ? 600 : .infinity
+                let contentWidth = min(geometry.size.width, maxContentWidth)
                 
                 ScrollView {
-                VStack(spacing: StyleGuide.spacing.xl) {
-                    // Top spacing to prevent cross cutoff
-                    Spacer()
-                        .frame(height: 40)
-                    
-                    // Header with progress-filled cross
-                    ProgressCrossView(userDataManager: userDataManager)
-                        .frame(height: 220)
-                        .padding(.bottom, -80) // Negative padding to pull content up without offset
-                        .onTapGesture {
-                            print("🎯 Cross tapped!")
-                            showBadgeProgress = true
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
-                        }
-                        .zIndex(-1) // Behind the weekly view
-                    
-                    // Weekly Streak Section
-                    WeeklyStreakView(userDataManager: userDataManager, showingProfile: $showingProfile)
-                        .padding(.horizontal, horizontalPadding + 16)
-                        .zIndex(1) // Above the cross
-                    
-                    // Today Content Section
-                    TodayContent()
-                        .padding(.horizontal, 16)
-                    
-                    // Bottom spacing for better scrolling - increased for smaller screens and tab bar
-                    Spacer()
-                        .frame(height: 120)
+                HStack {
+                    Spacer(minLength: 0)
+                    VStack(spacing: StyleGuide.spacing.xl) {
+                        // Top spacing to prevent cross cutoff
+                        Spacer()
+                            .frame(height: isIPad ? 320 : 40)
+                        
+                        // Header with progress-filled cross
+                        ProgressCrossView(userDataManager: userDataManager)
+                            .frame(height: isIPad ? 240 : 220)
+                            .padding(.bottom, isIPad ? -80 : -80)
+                            .onTapGesture {
+                                print("🎯 Cross tapped!")
+                                showBadgeProgress = true
+                                let generator = UIImpactFeedbackGenerator(style: .light)
+                                generator.impactOccurred()
+                            }
+                            .zIndex(-1) // Behind the weekly view
+                        
+                        // Weekly Streak Section
+                        WeeklyStreakView(userDataManager: userDataManager, showingProfile: $showingProfile)
+                            .padding(.horizontal, horizontalPadding + 16)
+                            .zIndex(1) // Above the cross
+                        
+                        // Today Content Section
+                        TodayContent()
+                            .padding(.horizontal, 16)
+                        
+                        // Bottom spacing for better scrolling
+                        Spacer()
+                            .frame(height: isIPad ? 100 : 120)
+                    }
+                    .frame(width: contentWidth)
+                    Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width)
                 }
@@ -321,8 +338,6 @@ struct HomeView: View {
                     .environmentObject(authManager)
                     .environmentObject(bibleNavigator)
             }
-            .toolbar(.hidden, for: .navigationBar)
-        }
     }
 }
 

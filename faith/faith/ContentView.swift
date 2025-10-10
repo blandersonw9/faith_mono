@@ -1,3 +1,4 @@
+
 //
 //  ContentView.swift
 //  faith
@@ -24,6 +25,18 @@ struct ContentView: View {
         }
         return .day
     }()
+    
+    // Detect if running on iPad or larger screen
+    private var isIPad: Bool {
+        // Check both idiom and screen size to catch iPad compatibility mode
+        let idiom = UIDevice.current.userInterfaceIdiom == .pad
+        let screenWidth = UIScreen.main.bounds.width
+        let screenHeight = UIScreen.main.bounds.height
+        let largestDimension = max(screenWidth, screenHeight)
+        // iPad screens are typically 1024+ points in their largest dimension
+        return idiom || largestDimension >= 1024
+    }
+    
     // Bottom safe-area inset (for painting under the home indicator)
     private var bottomSafeInset: CGFloat {
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -34,54 +47,92 @@ struct ContentView: View {
     }
     
     var body: some View {
+        let _ = print("🔍 Device idiom: \(UIDevice.current.userInterfaceIdiom.rawValue), Screen: \(UIScreen.main.bounds.size), isIPad: \(isIPad)")
+        
         NavigationStack {
-            ZStack {
-            // Conditional background based on selected tab
-            if selectedTab == 0 {
-                Image("background")
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .ignoresSafeArea(.all)
-                
+            if isIPad {
+                // iPad: Use VStack to guarantee tab bar visibility
+                GeometryReader { geo in
+                    VStack(spacing: 0) {
+                        ZStack {
+                            // Conditional background based on selected tab
+                            if selectedTab == 0 {
+                                Image("background")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } else {
+                                bibleReadingMode.backgroundColor
+                            }
+                            
+                            // Main Content Area
+                            ZStack {
+                                HomeView()
+                                    .environmentObject(userDataManager)
+                                    .environmentObject(bibleNavigator)
+                                    .opacity(selectedTab == 0 ? 1 : 0)
+                                    .zIndex(selectedTab == 0 ? 1 : 0)
+                                
+                                BibleView()
+                                    .environmentObject(userDataManager)
+                                    .environmentObject(bibleNavigator)
+                                    .opacity(selectedTab == 1 ? 1 : 0)
+                                    .zIndex(selectedTab == 1 ? 1 : 0)
+                            }
+                        }
+                        .frame(height: geo.size.height - 84) // Leave 84pt for tab bar (72pt + 12pt padding)
+                        
+                        // Tab bar at bottom (guaranteed visible)
+                        CustomTabView(selectedTab: $selectedTab, showingChat: $showingChat)
+                            .frame(height: 72)
+                            .padding(.bottom, 12)
+                    }
+                }
+                .navigationDestination(isPresented: $showingChat) {
+                    ChatView(showingChat: $showingChat, selectedTab: $selectedTab, initialPrompt: initialChatPrompt)
+                        .navigationBarHidden(true)
+                }
+                .toolbar(.hidden, for: .navigationBar)
             } else {
-                // Match Bible reading mode background to fill the top area behind the status bar
-                bibleReadingMode.backgroundColor
-                    .ignoresSafeArea(.all)
-            }
-            
-            
-            // Main Content Area - Keep views in memory but toggle visibility
-            ZStack {
-                // Tab 1: Home
-                HomeView()
-                    .environmentObject(userDataManager)
-                    .environmentObject(bibleNavigator)
-                    .opacity(selectedTab == 0 ? 1 : 0)
-                    .zIndex(selectedTab == 0 ? 1 : 0)
-                
-                // Tab 2: Bible
-                BibleView()
-                    .environmentObject(userDataManager)
-                    .environmentObject(bibleNavigator)
-                    .opacity(selectedTab == 1 ? 1 : 0)
-                    .zIndex(selectedTab == 1 ? 1 : 0)
-            }
-            }
-            // Place the custom tab bar at the absolute bottom and, for the Bible tab only,
-            // slide it down to cover the device's bottom inset
-            .overlay(alignment: .bottom) {
-                // Slightly lift the bar on Home so it matches visual baseline; fully cover inset on Bible
-                CustomTabView(selectedTab: $selectedTab, showingChat: $showingChat)
-                    .padding(.bottom, selectedTab == 1 ? -bottomSafeInset : 12)
-                    .ignoresSafeArea(edges: .bottom)
-            }
-            .navigationDestination(isPresented: $showingChat) {
-                ChatView(showingChat: $showingChat, selectedTab: $selectedTab, initialPrompt: initialChatPrompt)
-                    .navigationBarHidden(true)
+                // iPhone: Original overlay approach
+                ZStack {
+                    // Conditional background based on selected tab
+                    if selectedTab == 0 {
+                        Image("background")
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .ignoresSafeArea(.all)
+                    } else {
+                        bibleReadingMode.backgroundColor
+                            .ignoresSafeArea(.all)
+                    }
+                    
+                    // Main Content Area
+                    ZStack {
+                        HomeView()
+                            .environmentObject(userDataManager)
+                            .environmentObject(bibleNavigator)
+                            .opacity(selectedTab == 0 ? 1 : 0)
+                            .zIndex(selectedTab == 0 ? 1 : 0)
+                        
+                        BibleView()
+                            .environmentObject(userDataManager)
+                            .environmentObject(bibleNavigator)
+                            .opacity(selectedTab == 1 ? 1 : 0)
+                            .zIndex(selectedTab == 1 ? 1 : 0)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    CustomTabView(selectedTab: $selectedTab, showingChat: $showingChat)
+                        .padding(.bottom, selectedTab == 1 ? -bottomSafeInset : 12)
+                        .ignoresSafeArea(edges: .bottom)
+                }
+                .navigationDestination(isPresented: $showingChat) {
+                    ChatView(showingChat: $showingChat, selectedTab: $selectedTab, initialPrompt: initialChatPrompt)
+                        .navigationBarHidden(true)
+                }
+                .toolbar(.hidden, for: .navigationBar)
             }
         }
-        // Hide the default navigation bar to remove the system top hairline
-        .toolbar(.hidden, for: .navigationBar)
         // Keep ContentView's background synced when BibleView changes modes
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             if let saved = UserDefaults.standard.string(forKey: "bibleReadingMode"),
@@ -129,6 +180,17 @@ struct CustomTabView: View {
     private let barHeight: CGFloat = 72
     @State private var homeButtonCenter: CGFloat = 0
     @State private var bibleButtonCenter: CGFloat = 0
+    
+    // Detect if running on iPad or larger screen
+    private var isIPad: Bool {
+        // Check both idiom and screen size to catch iPad compatibility mode
+        let idiom = UIDevice.current.userInterfaceIdiom == .pad
+        let screenWidth = UIScreen.main.bounds.width
+        let screenHeight = UIScreen.main.bounds.height
+        let largestDimension = max(screenWidth, screenHeight)
+        // iPad screens are typically 1024+ points in their largest dimension
+        return idiom || largestDimension >= 1024
+    }
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -225,8 +287,8 @@ struct CustomTabView: View {
             }
         }
         .coordinateSpace(name: "tabBar")
-        .frame(height: barHeight + max(0, bottomInset))
-        .ignoresSafeArea(edges: .bottom)
+        .frame(height: barHeight + (isIPad ? 0 : max(0, bottomInset)))
+        .ignoresSafeArea(edges: isIPad ? [] : .bottom)
         .shadow(color: StyleGuide.mainBrown.opacity(0.25), radius: 4, x: 0, y: 0)
         
     }
